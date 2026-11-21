@@ -4,4 +4,7 @@ target/
 *.jar
 mtc-bin
 mtc-bin.build/
+mtc-service
+mtc-service.build/
 cert.der
+demo/certs/

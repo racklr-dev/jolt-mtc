@@ -170,16 +170,18 @@
             ok (and der (:valid (verify* (:config state) der)))]
         {:status (if ok 200 401) :body (if ok "ok" "unauthorized")})
 
-      (and (= "/ext_authz" path) (= :post method))
-      (let [j (json/read-str (body-str req))
-            cert (get-in j ["attributes" "source" "certificate"])
+      (str/starts-with? path "/ext_authz")
+      (let [s (body-str req)
+            j (try (json/read-str s) (catch Throwable _ {}))
+            cert (or (get-in j ["attributes" "source" "certificate"])
+                     (get-in j ["attributes" "request" "http" "headers" "x-mtc-cert"]))
             der (when cert (pem->der (url-decode cert)))
             ok (and der (:valid (verify* (:config state) der)))]
         (json-resp (if ok
                      {"allowed" true}
                      {"denied" {"status" {"code" 16}}})))
 
-      :else {:status 404 :body "not found"})))
+      :else {:status 404 :body (str "not found: " path " " method)})))
 
 (defn handler [state]
   (fn [req]
