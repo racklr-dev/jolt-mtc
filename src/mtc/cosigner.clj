@@ -19,8 +19,8 @@
   string oid/1.3.6.1.4.1.<arcs...> (RFC 5.3.1).  Signature algorithms are
   pluggable: sign / verify take the signature primitive as a function."
   (:require [clojure.string :as str]
-            [mtc.tls :as tls]
-            [mtc.der :as der]))
+            [jolt.tls :as tls]
+            [jolt.der :as der]))
 
 (def label-bytes
   "The fixed 12-byte domain-separation label: subtree/v1, newline, NUL."

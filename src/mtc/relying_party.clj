@@ -12,13 +12,14 @@
     :cosigner-verifiers [{:cosigner-id arcs :public-key ... :verify-fn f}]
     :cosigner-policy    (fn [valid-cosigner-id-arcs] -> bool)
     :revoked-ranges     [[start end) ...] serial ranges (optional)"
-  (:require [mtc.bit :as bit]
-            [mtc.merkle :as m]
-            [mtc.subtree :as st]
+  (:require [jolt.bit :as bit]
+            [jolt.merkle :as m]
+            [jolt.subtree :as st]
             [mtc.cosigner :as cos]
             [mtc.certificate :as cert]
-            [mtc.x509 :as x]
-            [mtc.sha256 :as sha]))
+            [jolt.x509 :as x]
+            [mtc.tbs :as tbs]
+            [jolt.sha256 :as sha]))
 
 (defn log-id
   "The issuance log's trust anchor ID: ca-id arcs + 0 + log-number (RFC 5.2)."
@@ -85,12 +86,12 @@
   (try
     (let [cert (x/parse-certificate cert-der)
           tbs (x/parse-tbs-certificate (:tbs-certificate cert))
-          _ (when-not (and (x/mtc-proof-alg-id? (:signature tbs))
-                           (x/mtc-proof-alg-id? (:signature-algorithm cert)))
+          _ (when-not (and (tbs/mtc-proof-alg-id? (:signature tbs))
+                           (tbs/mtc-proof-alg-id? (:signature-algorithm cert)))
               (throw (ex-info "signatureAlgorithm is not id-alg-mtcProof" {})))
           ca-id (x/decode-trust-anchor-name (:issuer tbs))
           serial (:serial-number tbs)
-          mtc-proof (cert/decode-mtc-proof (x/mtc-proof-bytes cert))
-          entry-hash (x/entry-hash-from-tbs sha/digest tbs (:extensions mtc-proof))]
+          mtc-proof (cert/decode-mtc-proof (tbs/mtc-proof-bytes cert))
+          entry-hash (tbs/entry-hash-from-tbs sha/digest tbs (:extensions mtc-proof))]
       (verify-core (assoc config :ca-id ca-id) serial mtc-proof entry-hash))
     (catch Throwable _ false)))

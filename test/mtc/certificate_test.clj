@@ -2,7 +2,7 @@
 ;; Run: cd mtc && jolt run test/mtc/certificate_test.clj
 (ns mtc.test.certificate
   (:require [mtc.certificate :as cert]
-            [mtc.merkle :as m]))
+            [jolt.merkle :as m]))
 
 (defn hex [b] (apply str (map (fn [x] (format "%02x" (bit-and x 0xff))) b)))
 

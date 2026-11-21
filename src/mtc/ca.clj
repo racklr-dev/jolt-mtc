@@ -17,7 +17,7 @@
   (OID id-pe-mtcCertificationAuthority-SHA256 = 1.3.6.1.5.5.7.1.38.)
   Building the full X.509 Certificate is out of scope; this namespace
   encodes/decodes the extension's value structure."
-  (:require [mtc.der :as der]))
+  (:require [jolt.der :as der]))
 
 (def mtc-ca-sha256-oid
   "id-pe-mtcCertificationAuthority-SHA256"

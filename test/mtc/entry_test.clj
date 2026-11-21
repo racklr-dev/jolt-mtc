@@ -1,9 +1,9 @@
 ;; MTCLogEntry + TBSCertificateLogEntry round-trip tests.
 ;; Run: cd mtc && jolt run test/mtc/entry_test.clj
 (ns mtc.test.entry
-  (:require [mtc.der :as der]
+  (:require [jolt.der :as der]
             [mtc.entry :as e]
-            [mtc.merkle :as m]))
+            [jolt.merkle :as m]))
 
 (defn hex [b] (apply str (map (fn [x] (format "%02x" (bit-and x 0xff))) b)))
 

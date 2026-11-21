@@ -8,7 +8,7 @@
   {caID landmarkGroups(2) N L} is the landmark group for log N through
   landmark L.  The trust_anchors TLS extension carries TrustAnchorID lists,
   whose contents are the RELATIVE-OID binary form of the ID."
-  (:require [mtc.tls :as tls]
+  (:require [jolt.tls :as tls]
             [mtc.cosigner :as cos]))
 
 (defn log-id

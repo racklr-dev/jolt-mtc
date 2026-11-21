@@ -2,7 +2,7 @@
 ;; Run: cd mtc && jolt run test/mtc/anchors_test.clj
 (ns mtc.test.anchors
   (:require [mtc.anchors :as a]
-            [mtc.der :as der]))
+            [jolt.der :as der]))
 
 (defn check [label expected got]
   (if (= expected got)

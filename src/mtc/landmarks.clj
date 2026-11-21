@@ -5,7 +5,7 @@
   A landmark sequence is append-only; landmark 0 is {tree-size 0, expiry 0}.
   Each later landmark has strictly increasing tree size and non-decreasing
   expiry.  The two landmark subtrees for landmark L are the two subtrees
-  covering [prev_tree_size, tree_size) (mtc.covering).  An unexpired
+  covering [prev_tree_size, tree_size) (jolt.covering).  An unexpired
   landmark is active; active landmark subtrees are predistributed.
 
   The publish format (RFC 6.4.3) is strict: a header line (latest_landmark
@@ -13,8 +13,8 @@
   (decimal, single space, newline), tree sizes strictly decreasing,
   expiries monotonically decreasing, at least one expired landmark."
   (:require [clojure.string :as str]
-            [mtc.covering :as cov]
-            [mtc.merkle :as m]))
+            [jolt.covering :as cov]
+            [jolt.merkle :as m]))
 
 (defn allocate-landmark
   "Append a landmark with the next number to the sequence."

@@ -20,8 +20,8 @@
   serialNumber = (log_number << 48) | index  (RFC 6.2).  signatures must
   have unique cosigner_ids ordered by (length, then lexicographic); the
   decoder rejects duplicates and wrong order."
-  (:require [mtc.bit :as bit]
-            [mtc.tls :as tls]
+  (:require [jolt.bit :as bit]
+            [jolt.tls :as tls]
             [mtc.entry :as entry]))
 
 (defn serial-number

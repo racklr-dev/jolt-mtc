@@ -2,8 +2,8 @@
 ;; Run: cd mtc && jolt run test/mtc/landmarks_test.clj
 (ns mtc.test.landmarks
   (:require [mtc.landmarks :as lm]
-            [mtc.subtree :as st]
-            [mtc.covering :as cov]))
+            [jolt.subtree :as st]
+            [jolt.covering :as cov]))
 
 (defn check [label expected got]
   (if (= expected got)

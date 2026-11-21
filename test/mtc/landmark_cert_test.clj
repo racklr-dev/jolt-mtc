@@ -3,8 +3,8 @@
 (ns mtc.test.landmark-cert
   (:require [mtc.landmarks :as lm]
             [mtc.certificate :as cert]
-            [mtc.merkle :as m]
-            [mtc.subtree :as st]))
+            [jolt.merkle :as m]
+            [jolt.subtree :as st]))
 
 (defn check [label expected got]
   (if (= expected got)

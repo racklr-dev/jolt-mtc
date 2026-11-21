@@ -15,7 +15,7 @@
   and algorithm, with subjectPublicKeyInfoHash added).  Name / Validity /
   AlgorithmIdentifier / Extensions are opaque DER blobs supplied by the
   caller (a full RFC5280 codec is out of scope)."
-  (:require [mtc.der :as der]))
+  (:require [jolt.der :as der]))
 
 (def null-entry 0)
 (def tbs-cert-entry 1)

@@ -3,7 +3,7 @@
 (ns mtc.test.sig
   (:require [mtc.sig :as sig]
             [mtc.cosigner :as cos]
-            [mtc.merkle :as m]))
+            [jolt.merkle :as m]))
 
 (defn check [label expected got]
   (if (= expected got)

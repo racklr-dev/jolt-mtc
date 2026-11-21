@@ -2,8 +2,8 @@
 ;; Run: cd mtc && jolt run test/mtc/log_test.clj
 (ns mtc.test.log
   (:require [mtc.log :as log]
-            [mtc.merkle :as m]
-            [mtc.subtree :as st]))
+            [jolt.merkle :as m]
+            [jolt.subtree :as st]))
 
 (defn check [label expected got]
   (if (= expected got)

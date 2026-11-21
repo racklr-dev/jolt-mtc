@@ -158,24 +158,31 @@ namespaces directly:
 (require '[mtc.log] '[mtc.certificate] '[mtc.relying-party])
 ```
 
+## Repositories
+
+This repo (`jolt-mtc`) composes two smaller reusable libraries as jolt-style
+git deps:
+
+| Repo | Namespaces |
+|---|---|
+| `racklr-dev/jolt-merkle` | `jolt.bit`, `jolt.sha256`, `jolt.merkle`, `jolt.subtree`, `jolt.covering` |
+| `racklr-dev/jolt-x509` | `jolt.der`, `jolt.tls`, `jolt.x509` |
+
 ## Layout
 
 ```
-mtc/
+jolt-mtc/
   src/mtc/
-    bit, sha256        bit/uint64 primitives; pure SHA-256
-    merkle, subtree    RFC9162 tree + RFC §4 inclusion/consistency/covering
-    der, x509          DER codec + Name/Validity/Certificate parsing
-    tls, entry         TLS-presentation primitives; MTCLogEntry/TBSCertificateLogEntry
-    log                append-only issuance log (persistent)
-    cosigner, sig      CosignedSubtree; real Ed25519/ECDSA/RSA via jolt-crypto
-    certificate        MTCProof/Cosignature, serialNumber, GREASE
-    ca                 MTCCertificationAuthority extension
-    landmarks          landmark sequences, publish format, landmark-relative certs
-    anchors, iana      trust-anchor IDs, TLS trust_anchors, IANA registries
-    acme               ACME link relation + content type
-    policy             cosigner policies (quorum)
-    relying-party      verification (full DER cert + single-pass hash)
+    entry, tbs          MTCLogEntry/TBSCertificateLogEntry; TBS -> entry bridge
+    log                 append-only issuance log (persistent)
+    cosigner, sig       CosignedSubtree; real Ed25519/ECDSA/RSA via jolt-crypto
+    certificate         MTCProof/Cosignature, serialNumber, GREASE
+    ca                  MTCCertificationAuthority extension
+    landmarks           landmark sequences, publish format, landmark-relative certs
+    anchors, iana       trust-anchor IDs, TLS trust_anchors, IANA registries
+    acme                ACME link relation + content type
+    policy              cosigner policies (quorum)
+    relying-party       verification (full DER cert + single-pass hash)
     service            HTTP verification sidecar
     ca-server          deployable self-signing CA (+ revocation)
     cosigner-server    standalone witness cosigner

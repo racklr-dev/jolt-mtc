@@ -11,8 +11,8 @@
   (encoded MTCLogEntry values), the Merkle tree head is updated
   incrementally (RFC6962-style frontier), and subtree proofs are derived
   from the entries on demand."
-  (:require [mtc.merkle :as m]
-            [mtc.subtree :as st]))
+  (:require [jolt.merkle :as m]
+            [jolt.subtree :as st]))
 
 (defn new-log
   "A fresh issuance log with the given positive log number."

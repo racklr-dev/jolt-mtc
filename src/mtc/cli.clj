@@ -12,15 +12,15 @@
     mtc.cli demo [index]
         Run the fixed 20-entry demo (issue for an index, verify, write cert.der)."
   (:require [clojure.string :as str]
-            [mtc.der :as der]
-            [mtc.x509 :as x]
+            [jolt.der :as der]
+            [jolt.x509 :as x]
             [mtc.entry :as entry]
             [mtc.log :as log]
             [mtc.certificate :as cert]
             [mtc.cosigner :as cos]
             [mtc.relying-party :as rp]
-            [mtc.sha256 :as sha]
-            [mtc.merkle :as m]
+            [jolt.sha256 :as sha]
+            [jolt.merkle :as m]
             [mtc.sig :as sig]))
 
 (def ca-id [32473 1])

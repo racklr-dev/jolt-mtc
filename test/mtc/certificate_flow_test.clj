@@ -2,15 +2,16 @@
 ;; signatureValue, then verify it through mtc.relying-party/verify-certificate.
 ;; Run: cd mtc && jolt run test/mtc/certificate_flow_test.clj
 (ns mtc.test.certificate-flow
-  (:require [mtc.der :as der]
-            [mtc.x509 :as x]
+  (:require [jolt.der :as der]
+            [jolt.x509 :as x]
+            [mtc.tbs :as tbs]
             [mtc.entry :as entry]
             [mtc.log :as log]
             [mtc.certificate :as cert]
             [mtc.cosigner :as cos]
             [mtc.relying-party :as rp]
-            [mtc.sha256 :as sha]
-            [mtc.merkle :as m]))
+            [jolt.sha256 :as sha]
+            [jolt.merkle :as m]))
 
 (defn check [label expected got]
   (if (= expected got)
@@ -94,7 +95,7 @@
 
 ;; verify the reconstructed entry hash equals the direct log entry hash
 (let [tbs (x/parse-tbs-certificate (:tbs-certificate (x/parse-certificate cert-der)))
-      reconstructed (x/mtc-log-entry-bytes-from-tbs sha/digest tbs [])]
+      reconstructed (tbs/mtc-log-entry-bytes-from-tbs sha/digest tbs [])]
   (check "reconstructed entry == log entry" true (m/bytes= (entries idx) reconstructed)))
 
 ;; wrong signatureAlgorithm (not id-alg-mtcProof) rejected

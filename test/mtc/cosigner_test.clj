@@ -2,8 +2,8 @@
 ;; Run: cd mtc && jolt run test/mtc/cosigner_test.clj
 (ns mtc.test.cosigner
   (:require [mtc.cosigner :as c]
-            [mtc.merkle :as m]
-            [mtc.sha256 :as sha]))
+            [jolt.merkle :as m]
+            [jolt.sha256 :as sha]))
 
 (defn check [label expected got]
   (if (= expected got)

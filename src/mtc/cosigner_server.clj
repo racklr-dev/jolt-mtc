@@ -12,7 +12,7 @@
             [ring-chez.adapter :as adapter]
             [mtc.cosigner :as cos]
             [mtc.log :as log]
-            [mtc.merkle :as m]
+            [jolt.merkle :as m]
             [mtc.sig :as sig]
             [mtc.service :as svc]
             [jolt.http-client :as http]))

@@ -2,8 +2,8 @@
 ;; Run: cd mtc && jolt run test/mtc/ca_test.clj
 (ns mtc.test.ca
   (:require [mtc.ca :as ca]
-            [mtc.der :as der]
-            [mtc.merkle :as m]))
+            [jolt.der :as der]
+            [jolt.merkle :as m]))
 
 (defn hex [b] (apply str (map (fn [x] (format "%02x" (bit-and x 0xff))) b)))
 

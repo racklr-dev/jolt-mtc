@@ -6,8 +6,8 @@
             [mtc.certificate :as cert]
             [mtc.cosigner :as cos]
             [mtc.relying-party :as rp]
-            [mtc.sha256 :as sha]
-            [mtc.merkle :as m]))
+            [jolt.sha256 :as sha]
+            [jolt.merkle :as m]))
 
 (defn check [label expected got]
   (if (= expected got)
