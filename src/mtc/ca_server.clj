@@ -38,6 +38,13 @@
 (defn- write-bytes [p bs] (let [o (java.io.FileOutputStream. p)] (.write o bs) (.close o)))
 (defn- read-bytes [p] (.readAllBytes (java.io.FileInputStream. p)))
 
+(defn- load-revoked []
+  (try (get (json/read-str (String. (read-bytes (path "revoked.json")) "UTF-8")) "ranges" [])
+       (catch Throwable _ [])))
+
+(defn- save-revoked [ranges]
+  (write-bytes (path "revoked.json") (.getBytes (json/write-str {"ranges" ranges}) "UTF-8")))
+
 (defn- load-key-or-gen []
   (let [kp (try
              [(sig/parse-private-key "Ed25519" (read-bytes (path "ca-key.p8")))
@@ -111,11 +118,14 @@
            :cosigners cosigners
            :witness-ids witness-ids
            :clients {}   ; index -> {:key priv :cert der}
+           :revoked-ranges (load-revoked)
            :config {:ca-id ca-id
                     :trusted-subtrees []
                     :cosigner-verifiers (into [{:cosigner-id ca-id :public-key pub :verify-fn (sig/ed25519-verifier)}]
                                               (map (fn [c] {:cosigner-id (:id c) :public-key (:public-key c) :verify-fn (sig/ed25519-verifier)}) cosigners))
-                    :cosigner-policy (policy/ca-and-n-of ca-id witness-ids quorum)
+                    :cosigner-policy (if (seq witness-ids)
+                                       (policy/ca-and-n-of ca-id witness-ids (min quorum (count witness-ids)))
+                                       (policy/any-of [ca-id]))
                     :revoked-ranges []}})))
 
 (defn- issue! [state subject]
@@ -167,7 +177,7 @@
     (try
       (let [path (:uri req)
             method (:request-method req)
-            cfg (:config @state)]
+            cfg (assoc (:config @state) :revoked-ranges (:revoked-ranges @state))]
         (cond
           (= "/health" path) {:status 200 :body "ok"}
 
@@ -186,6 +196,14 @@
           (let [j (try (json/read-str (svc/body-str req)) (catch Throwable _ {}))
                 subject (or (get j "subject") "client.example.com")]
             (svc/json-resp (issue! state subject)))
+
+          (and (= "/revoke" path) (= :post method))
+          (let [j (json/read-str (svc/body-str req))
+                s (long (get j "start"))
+                e (long (get j "end"))]
+            (swap! state update :revoked-ranges conj [s e])
+            (save-revoked (:revoked-ranges @state))
+            (svc/json-resp {"revoked-ranges" (:revoked-ranges @state)}))
 
           (str/starts-with? path "/entries/")
           (let [from (Long/parseLong (subs path 9))
