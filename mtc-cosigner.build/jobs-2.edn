@@ -1,0 +1,1 @@
+#("./mtc-cosigner.build/app-36.ss" "./mtc-cosigner.build/app-36.ss.so" "./mtc-cosigner.build/app-36.ss.so.vfasl" "release" default #f)

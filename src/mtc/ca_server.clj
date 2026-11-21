@@ -24,7 +24,9 @@
             [mtc.sha256 :as sha]
             [mtc.merkle :as m]
             [mtc.sig :as sig]
-            [mtc.service :as svc]))
+            [mtc.policy :as policy]
+            [mtc.service :as svc]
+            [jolt.http-client :as http]))
 
 (def ca-id [32473 1])
 (def cn-oid [2 5 4 3])
@@ -76,17 +78,44 @@
      [:raw mtc-sig-alg]
      [:bitstring (cert/encode-mtc-proof mtc-proof)]]))
 
+(def cosigner-urls
+  (let [v (System/getenv "MTC_COSIGNERS")]
+    (if (and v (not (str/blank? v)))
+      (str/split v #",")
+      [])))
+
+(def quorum
+  (let [v (System/getenv "MTC_QUORUM")]
+    (if (and v (not (str/blank? v))) (Long/parseLong v) 1)))
+
+(defn- http-get-json [url]
+  (json/read-str (:body (http/get url {:as :string}))))
+
+(defn- load-cosigners []
+  (mapv (fn [url]
+          {:url url
+           :id (get (http-get-json (str url "/id")) "cosigner-id")
+           :public-key (sig/parse-public-key "Ed25519"
+                         (.decode (java.util.Base64/getDecoder)
+                                  (get (http-get-json (str url "/public-key")) "public-key")))})
+        cosigner-urls))
+
 (defn- make-state []
   (let [[priv pub] (load-key-or-gen)
-        L (log/load-log 1 (path "log.bin"))]
+        L (log/load-log 1 (path "log.bin"))
+        cosigners (load-cosigners)
+        witness-ids (mapv :id cosigners)]
     (atom {:ca-key priv
            :ca-pub pub
            :log L
+           :cosigners cosigners
+           :witness-ids witness-ids
            :clients {}   ; index -> {:key priv :cert der}
            :config {:ca-id ca-id
                     :trusted-subtrees []
-                    :cosigner-verifiers [{:cosigner-id ca-id :public-key pub :verify-fn (sig/ed25519-verifier)}]
-                    :cosigner-policy (fn [ids] (some #{ca-id} ids))
+                    :cosigner-verifiers (into [{:cosigner-id ca-id :public-key pub :verify-fn (sig/ed25519-verifier)}]
+                                              (map (fn [c] {:cosigner-id (:id c) :public-key (:public-key c) :verify-fn (sig/ed25519-verifier)}) cosigners))
+                    :cosigner-policy (policy/ca-and-n-of ca-id witness-ids quorum)
                     :revoked-ranges []}})))
 
 (defn- issue! [state subject]
@@ -103,9 +132,27 @@
              :start 0 :end (log/tree-size new-log)
              :subtree-hash (log/root-hash new-log)}
         cosig (cos/sign (sig/ed25519-signer) (:ca-key @state) cst)
+        witness-sigs
+        (mapv (fn [c]
+                (let [wcst {:cosigner-name (cos/trust-anchor-name (:id c))
+                            :timestamp 0
+                            :log-origin (cos/trust-anchor-name (rp/log-id ca-id 1))
+                            :start 0 :end (log/tree-size new-log)
+                            :subtree-hash (log/root-hash new-log)}
+                      resp (try
+                             (json/read-str
+                               (:body (http/post (str (:url c) "/cosign")
+                                                 {:body (json/write-str {"cosigned-subtree" (svc/b64 (cos/encode-cosigned-subtree wcst))})
+                                                  :content-type :json :as :string})))
+                             (catch Throwable e {:error (.getMessage e)}))]
+                  (if-let [sig (get resp "signature")]
+                    {:cosigner-id (cos/cosigner-id-bytes (:id c))
+                     :signature (.decode (java.util.Base64/getDecoder) sig)}
+                    (throw (ex-info (str "cosigner " (:id c) " refused: " (get resp "error")) {})))))
+              (:cosigners @state))
         mtc-proof {:extensions [] :start 0 :end (log/tree-size new-log)
                    :inclusion-proof proof
-                   :signatures [{:cosigner-id (cos/cosigner-id-bytes ca-id) :signature cosig}]}
+                   :signatures (into [{:cosigner-id (cos/cosigner-id-bytes ca-id) :signature cosig}] witness-sigs)}
         der (build-cert serial subject spki mtc-proof)]
     (swap! state assoc :log new-log
            :clients (assoc (:clients @state) index {:key (:private kp) :cert der}))

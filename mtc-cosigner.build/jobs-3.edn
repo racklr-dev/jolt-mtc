@@ -1,0 +1,1 @@
+#("./mtc-cosigner.build/app-post.ss" "./mtc-cosigner.build/app-post.ss.so" "./mtc-cosigner.build/app-post.ss.so.vfasl" "release" default #f)
