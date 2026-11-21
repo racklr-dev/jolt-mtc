@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mtc-quorum
+  labels:
+    app: mtc-quorum
+spec:
+  containers:
+  - name: mtc-ca
+    image: mtc-ca:latest
+    ports: [{ containerPort: 8080 }]
+    env:
+    - { name: MTC_DATA_DIR, value: /data }
+    - { name: MTC_COSIGNERS, value: "http://mtc-w1:8080,http://mtc-w2:8080,http://mtc-w3:8080" }
+    - { name: MTC_QUORUM, value: "2" }
+    volumeMounts: [{ mountPath: /data, name: ca-data }]
+  - name: mtc-w1
+    image: mtc-cosigner:latest
+    ports: [{ containerPort: 8080 }]
+    env:
+    - { name: MTC_DATA_DIR, value: /data }
+    - { name: MTC_COSIGNER_ID, value: "32473.1.101" }
+    - { name: MTC_CA_URL, value: "http://mtc-ca:8080" }
+    volumeMounts: [{ mountPath: /data, name: w1-data }]
+  - name: mtc-w2
+    image: mtc-cosigner:latest
+    ports: [{ containerPort: 8080 }]
+    env:
+    - { name: MTC_DATA_DIR, value: /data }
+    - { name: MTC_COSIGNER_ID, value: "32473.1.102" }
+    - { name: MTC_CA_URL, value: "http://mtc-ca:8080" }
+    volumeMounts: [{ mountPath: /data, name: w2-data }]
+  - name: mtc-w3
+    image: mtc-cosigner:latest
+    ports: [{ containerPort: 8080 }]
+    env:
+    - { name: MTC_DATA_DIR, value: /data }
+    - { name: MTC_COSIGNER_ID, value: "32473.1.103" }
+    - { name: MTC_CA_URL, value: "http://mtc-ca:8080" }
+    volumeMounts: [{ mountPath: /data, name: w3-data }]
+  - name: demo-site
+    image: nginx:latest
+    ports: [{ containerPort: 8443 }]
+    volumeMounts:
+    - { mountPath: /etc/nginx/nginx.conf, name: nginx-conf, subPath: nginx.conf, readOnly: true }
+    - { mountPath: /site, name: site, readOnly: true }
+  volumes:
+  - { name: ca-data, emptyDir: {} }
+  - { name: w1-data, emptyDir: {} }
+  - { name: w2-data, emptyDir: {} }
+  - { name: w3-data, emptyDir: {} }
+  - name: nginx-conf
+    configMap:
+      name: mtc-nginx-conf
+  - name: site
+    configMap:
+      name: mtc-site

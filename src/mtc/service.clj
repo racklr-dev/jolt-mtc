@@ -179,8 +179,7 @@
             ok (and der (:valid (verify* (:config state) der)))]
         (if ok
           (json-resp {"allowed" true})
-          {:status 401 :headers {"Content-Type" "application/json"}
-           :body (json/write-str {"denied" {"status" {"code" 401}}})}))
+          (json-resp {"denied" {"status" {"code" 16}}}))
 
       :else {:status 404 :body (str "not found: " path " " method)})))
 

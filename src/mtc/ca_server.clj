@@ -240,8 +240,7 @@
                 der (when cert (svc/pem->der (svc/url-decode cert)))
                 ok (and der (:valid (svc/verify* cfg der)))]
             (if ok (svc/json-resp {"allowed" true})
-                    {:status 401 :headers {"Content-Type" "application/json"}
-                     :body (json/write-str {"denied" {"status" {"code" 401}}})}))
+                    (svc/json-resp {"denied" {"status" {"code" 16}}}))
 
           :else {:status 404 :body (str "not found: " path " " method)}))
       (catch Throwable e {:status 500 :body (str "internal error: " (.getMessage e))}))))
