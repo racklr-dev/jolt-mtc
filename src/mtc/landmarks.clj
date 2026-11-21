@@ -13,7 +13,8 @@
   (decimal, single space, newline), tree sizes strictly decreasing,
   expiries monotonically decreasing, at least one expired landmark."
   (:require [clojure.string :as str]
-            [mtc.covering :as cov]))
+            [mtc.covering :as cov]
+            [mtc.merkle :as m]))
 
 (defn allocate-landmark
   "Append a landmark with the next number to the sequence."
@@ -53,6 +54,29 @@
                        (str (:tree-size l) " " (:expiry l))))
                    (range (inc num-active)))]
     (str latest "\n" (str/join "\n" lines) "\n")))
+
+(defn landmark-for-index
+  "The lowest-numbered landmark whose tree size is strictly greater than idx
+  (RFC 6.4.4)."
+  [landmarks idx]
+  (first (filter (fn [l] (> (:tree-size l) idx)) landmarks)))
+
+(defn landmark-subtree-for-index
+  "The landmark subtree of the covering landmark for idx, as [start end)."
+  [landmarks idx]
+  (when-let [L (landmark-for-index landmarks idx)]
+    (let [[left right] (landmark-subtrees landmarks (:number L))]
+      (or (when (<= (first left) idx (dec (second left))) left)
+          (when (<= (first right) idx (dec (second right))) right)))))
+
+(defn landmark-relative-proof
+  "Build the landmark-relative MTCProof for entry idx (RFC 6.4.4): the proof
+  for the covering landmark subtree, with no cosignatures."
+  [entries landmarks idx extensions]
+  (when-let [[s e] (landmark-subtree-for-index landmarks idx)]
+    (let [nt (m/node-table entries)
+          proof (m/inclusion-path-tbl nt (- idx s) s e)]
+      {:extensions extensions :start s :end e :inclusion-proof proof :signatures []})))
 
 (defn decode-landmarks
   "Strictly decode a published landmark document. Returns a vector of

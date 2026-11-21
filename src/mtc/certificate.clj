@@ -71,6 +71,22 @@
     (tls/varlen 2 (apply tls/concat-bytes inclusion-proof))
     (tls/varlen 3 (apply tls/concat-bytes (map encode-cosignature signatures)))))
 
+(defn sort-signatures
+  "Sort cosignatures by cosigner_id (shorter first, then lexicographic), the
+  RFC 6.2 ordering."
+  [signatures]
+  (sort-by :cosigner-id (fn [a b] (neg? (cosigner-id-cmp a b))) signatures))
+
+(defn grease-cosignature
+  "A GREASE cosignature (RFC 6.2): an unused cosigner ID + arbitrary bytes."
+  [cosigner-id-bytes sig-bytes]
+  {:cosigner-id cosigner-id-bytes :signature sig-bytes})
+
+(defn add-grease
+  "Insert GREASE cosignatures into an MTCProof, keeping strict ordering."
+  [mtc-proof greases]
+  (assoc mtc-proof :signatures (sort-signatures (concat (:signatures mtc-proof) greases))))
+
 (defn decode-mtc-proof
   "Decode an MTCProof into the same keyed map. Rejects duplicate or
   mis-ordered cosigner_ids (RFC 6.2)."
