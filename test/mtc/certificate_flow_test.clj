@@ -18,7 +18,7 @@
     (do (println (str "FAIL " label)) (println (str "  expected " (pr-str expected))) (println (str "  got      " (pr-str got))) (System/exit 1))))
 
 (def cn-oid [2 5 4 3])
-(def issuer-name (x/encode-name [[[cn-oid [:utf8 "MTC Test CA"]]]]))
+(def issuer-name (x/encode-trust-anchor-name [32473 1]))
 (def validity (x/encode-validity [:utc "240101000000Z"] [:utc "260101000000Z"]))
 (def spki-alg (x/encode-alg-id [1 2 840 113549 1 1 1] nil))
 (def spki (der/encode [:seq [:raw spki-alg] [:bitstring (.getBytes "subject-public-key" "UTF-8")]]))

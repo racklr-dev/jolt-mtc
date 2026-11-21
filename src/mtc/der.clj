@@ -93,6 +93,10 @@
   [data]
   (tlv 0x03 (bcat 0x00 data)))
 
+(defn encode-teletex [bytes] (tlv 0x14 bytes))
+(defn encode-universal [bytes] (tlv 0x1C bytes))
+(defn encode-bmp [bytes] (tlv 0x1E bytes))
+
 (defn- enc-oid-arc
   "Base-128 encode one OID arc (arc >= 0)."
   [arc]
@@ -129,6 +133,17 @@
   [content-bytes]
   (parse-oid-content content-bytes 0 (alength content-bytes)))
 
+(defn relative-oid-content
+  "The contents octets of a RELATIVE-OID for arcs: base-128 of each arc
+  independently (no first-two-arcs fold, unlike an OBJECT IDENTIFIER)."
+  [arcs]
+  (byte-array (mapv unchecked-byte (mapcat enc-oid-arc arcs))))
+
+(defn encode-relative-oid
+  "DER RELATIVE-OID (tag 0x0D) for arcs."
+  [arcs]
+  (tlv 0x0D (relative-oid-content arcs)))
+
 (declare encode parse-oid-content)
 
 (defn encode-seq
@@ -153,6 +168,10 @@
     :printable (encode-printable (second v))
     :ia5 (encode-ia5 (second v))
     :bitstring (encode-bitstring (second v))
+    :relative-oid (encode-relative-oid (second v))
+    :teletex (encode-teletex (second v))
+    :universal (encode-universal (second v))
+    :bmp (encode-bmp (second v))
     :ctx (tlv (bit-or 0xA0 (second v)) (encode (nth v 2)))
     :ctx* (tlv (bit-or 0x80 (second v)) (nth v 2))
     :raw (second v)
@@ -186,6 +205,17 @@
         (if (= i len)
           (if neg? (- n (bit-shift-left 1 (* 8 len))) n)
           (recur (inc i) (+ (* n 256) (u8 (aget body i)))))))))
+
+(defn relative-oid-arcs
+  "Parse RELATIVE-OID contents octets back into arcs (each arc base-128)."
+  [bytes]
+  (loop [i 0 arcs [] cur 0]
+    (if (>= i (alength bytes))
+      arcs
+      (let [b (bit-and (aget bytes i) 0xFF)]
+        (if (pos? (bit-and b 0x80))
+          (recur (inc i) arcs (+ (* cur 128) (bit-and b 0x7F)))
+          (recur (inc i) (conj arcs (+ (* cur 128) b)) 0))))))
 
 (defn- parse-oid-content [bytes off len]
   (let [end (+ off len)
@@ -224,7 +254,12 @@
       0x13 [[:printable (bytes->str body)] end]
       0x16 [[:ia5 (bytes->str body)] end]
       0x17 [[:utc (bytes->str body)] end]
+      0x0D [[:relative-oid (relative-oid-arcs body)] end]
+      0x14 [[:teletex body] end]
       0x18 [[:gentime (bytes->str body)] end]
+      0x1C [[:universal body] end]
+      0x1E [[:bmp body] end]
+      0x03 (let [data (bytes-range body 1 (dec (alength body)))] [[:bitstring data] end])
       0x30 [(into [:seq] (parse-seq bytes body-off len)) end]
       0x31 [(into [:set] (parse-seq bytes body-off len)) end]
       (cond

@@ -35,4 +35,10 @@
   (check "alg-id oid" [1 2 840 113549 1 1 1] (first dec))
   (check "alg-id params null" [:null] (second dec)))
 
+;; Trust anchor ID distinguished name (trust-anchor-ids Section 4.1)
+;; The DER RELATIVE-OID for 32473.1 is 0d 04 81 fd 59 01.
+(let [name (x/encode-trust-anchor-name [32473 1])
+      dec (x/decode-trust-anchor-name name)]
+  (check "trust-anchor name roundtrip" [32473 1] dec))
+
 (println "All X.509 tests passed")

@@ -26,8 +26,6 @@
   "The fixed 12-byte domain-separation label: subtree/v1, newline, NUL."
   (byte-array (concat (map int "subtree/v1") [0x0A 0x00])))
 
-(def trust-anchor-prefix [1 3 6 1 4 1])
-
 (defn trust-anchor-name
   "The ASCII string oid/1.3.6.1.4.1.<arcs> for a trust anchor ID (RFC 5.3.1).
   arcs is the PEN-relative trust anchor ID (e.g. [32473 1])."
@@ -35,15 +33,15 @@
   (str "oid/1.3.6.1.4.1." (str/join "." arcs)))
 
 (defn cosigner-id-bytes
-  "Binary representation of a cosigner ID (a trust anchor ID): the DER OID
-  content of 1.3.6.1.4.1.<arcs>."
+  "Binary representation of a cosigner ID (a trust anchor ID): the contents
+  octets of the RELATIVE-OID DER encoding (trust-anchor-ids Section 4)."
   [arcs]
-  (der/oid-content (into trust-anchor-prefix arcs)))
+  (der/relative-oid-content arcs))
 
 (defn cosigner-id-arcs
   "Parse cosigner-id-bytes back to PEN-relative arcs."
   [bytes]
-  (vec (drop (count trust-anchor-prefix) (der/oid-arcs bytes))))
+  (der/relative-oid-arcs bytes))
 
 (defn- bytes->str [b]
   (apply str (map char b)))

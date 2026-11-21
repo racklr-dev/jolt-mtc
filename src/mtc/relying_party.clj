@@ -85,8 +85,9 @@
   (try
     (let [cert (x/parse-certificate cert-der)
           tbs (x/parse-tbs-certificate (:tbs-certificate cert))
+          ca-id (x/decode-trust-anchor-name (:issuer tbs))
           serial (:serial-number tbs)
           mtc-proof (cert/decode-mtc-proof (x/mtc-proof-bytes cert))
           entry-hash (x/entry-hash-from-tbs sha/digest tbs (:extensions mtc-proof))]
-      (verify-core config serial mtc-proof entry-hash))
+      (verify-core (assoc config :ca-id ca-id) serial mtc-proof entry-hash))
     (catch Throwable _ false)))

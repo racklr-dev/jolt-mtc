@@ -180,3 +180,29 @@
   fields. hash-fn hashes the SPKI; the outer leaf hash is SHA-256."
   [hash-fn tbs extensions]
   (m/leaf-hash (mtc-log-entry-bytes-from-tbs hash-fn tbs extensions)))
+
+;; --- Trust anchor ID distinguished name (trust-anchor-ids Section 4.1) ------
+
+(def id-rdna-trust-anchor-id
+  "id-rdna-trustAnchorID: 1.3.6.1.5.5.7.25.3."
+  [1 3 6 1 5 5 7 25 3])
+
+(defn encode-trust-anchor-name
+  "Encode a trust anchor ID (PEN-relative arcs) as a PKIX distinguished name:
+  a single RDN whose single attribute has type id-rdna-trustAnchorID and value
+  a RELATIVE-OID holding the trust anchor ID."
+  [arcs]
+  (encode-name [[[id-rdna-trust-anchor-id [:relative-oid arcs]]]]))
+
+(defn decode-trust-anchor-name
+  "Decode a trust anchor ID distinguished name back to its PEN-relative arcs."
+  [name-der]
+  (let [rdns (decode-name name-der)]
+    (when-not (and (= 1 (count rdns)) (= 1 (count (first rdns))))
+      (throw (ex-info "trust anchor name must be one RDN with one attribute" {})))
+    (let [[oid value] (first (first rdns))]
+      (when-not (= id-rdna-trust-anchor-id oid)
+        (throw (ex-info "trust anchor name has wrong attribute type" {:oid oid})))
+      (when-not (= :relative-oid (first value))
+        (throw (ex-info "trust anchor name value must be a RELATIVE-OID" {})))
+      (second value))))
