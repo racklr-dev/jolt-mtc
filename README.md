@@ -15,6 +15,25 @@ cosigners, quorum policies, revocation, and verification — as pure Clojure
 that runs on [jolt](https://github.com/jolt-lang/jolt) (Clojure on Chez Scheme,
 no JVM), and as standalone native binaries.
 
+## Use
+
+```clojure
+;; deps.edn
+{:deps {racklr-dev/jolt-mtc
+        {:git/url "https://github.com/racklr-dev/jolt-mtc"
+         :git/sha "b5fcb09f2281b528398766e3d739730aec1f6c12"}}}
+```
+
+```clojure
+(require '[mtc.log]
+         '[mtc.certificate]
+         '[mtc.relying-party])
+```
+
+`jolt-mtc` composes two smaller reusable libraries, which come along
+automatically as git deps: `racklr-dev/jolt-merkle` (RFC9162 trees + subtrees)
+and `racklr-dev/jolt-x509` (DER + X.509).
+
 ## Quickstart
 
 Make your first self-signed Merkle Tree Certificate in three commands.

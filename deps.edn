@@ -2,10 +2,10 @@
 
  :deps {racklr-dev/jolt-merkle
         {:git/url "https://github.com/racklr-dev/jolt-merkle"
-         :git/sha "6f40fef761388f059cb75b3826b16481dbe8aaa5"}
+         :git/sha "06e135fe8ff54257542e857fd45831a4fd6b5e6f"}
         racklr-dev/jolt-x509
         {:git/url "https://github.com/racklr-dev/jolt-x509"
-         :git/sha "f33074768e4a7305fbff3881612114c5ac890a69"}}
+         :git/sha "40b7d127b8d53c72f33ebcced5bb60d0f43eebf5"}}
 
  ;; :crypto — real signature algorithms (mtc.sig)
  ;; :server — the HTTP CA/verifier/cosigner services over ring-chez-adapter
