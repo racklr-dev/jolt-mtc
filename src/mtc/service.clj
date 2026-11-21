@@ -177,9 +177,10 @@
                      (get-in j ["attributes" "request" "http" "headers" "x-mtc-cert"]))
             der (when cert (pem->der (url-decode cert)))
             ok (and der (:valid (verify* (:config state) der)))]
-        (json-resp (if ok
-                     {"allowed" true}
-                     {"denied" {"status" {"code" 16}}})))
+        (if ok
+          (json-resp {"allowed" true})
+          {:status 401 :headers {"Content-Type" "application/json"}
+           :body (json/write-str {"denied" {"status" {"code" 401}}})})))
 
       :else {:status 404 :body (str "not found: " path " " method)})))
 

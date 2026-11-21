@@ -25,10 +25,9 @@ static_resources:
           - name: envoy.filters.http.ext_authz
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
-              transport_api_version: V3
               http_service:
                 server_uri:
-                  uri: mtc-sidecar:8080
+                  uri: http://mtc-sidecar:8080
                   cluster: ext_authz_cluster
                   timeout: 5s
                 path_prefix: /ext_authz
