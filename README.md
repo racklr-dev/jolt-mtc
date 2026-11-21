@@ -308,5 +308,5 @@ and the §12.2.1 log-failure recovery flow, which is defined by the
 * The demos: `demo/run-quorum-demo.sh` (CA + 3 witnesses + nginx) is the
   richest end-to-end example.
 * [jolt](https://github.com/jolt-lang/jolt) and its
-  [docs](https://jolt-lang.net/docs) — how the Clojure-on-Chez runtime and
+  [docs](https://jolt-lang.net/docs/getting-started.html) — how the Clojure-on-Chez runtime and
   `jolt build` work.
