@@ -19,6 +19,8 @@
 
 (defn- u8 [b] (bit-and b 0xFF))
 
+(defn- bytes->str [b] (apply str (map char b)))
+
 (defn- bcat
   "Concatenate byte arrays, single byte ints, or seqs of byte ints into one
   byte array."
@@ -42,7 +44,7 @@
   [n]
   (loop [n n acc ()]
     (if (zero? n)
-      (mapv unchecked-byte acc)
+      (byte-array (mapv unchecked-byte acc))
       (recur (quot n 256) (cons (mod n 256) acc)))))
 
 (defn- encode-length [n]
@@ -68,6 +70,23 @@
 (defn encode-octets [bytes] (tlv 0x04 bytes))
 
 (defn encode-null [] (tlv 0x05 (byte-array 0)))
+
+(defn encode-bool [b] (tlv 0x01 (byte-array [(if b 0xFF 0x00)])))
+
+(declare encode)
+
+(defn- encode-constructed [tag elems]
+  (tlv tag (apply bcat (map encode elems))))
+
+(defn encode-set [elems] (encode-constructed 0x31 elems))
+
+(defn- encode-str-tlv [tag s] (tlv tag (.getBytes s "UTF-8")))
+
+(defn encode-utc [s] (encode-str-tlv 0x17 s))
+(defn encode-gentime [s] (encode-str-tlv 0x18 s))
+(defn encode-utf8 [s] (encode-str-tlv 0x0C s))
+(defn encode-printable [s] (encode-str-tlv 0x13 s))
+(defn encode-ia5 [s] (encode-str-tlv 0x16 s))
 
 (defn- enc-oid-arc
   "Base-128 encode one OID arc (arc >= 0)."
@@ -120,7 +139,14 @@
     :octets (encode-octets (second v))
     :oid (encode-oid (second v))
     :seq (encode-seq (rest v))
+    :set (encode-set (rest v))
     :null (encode-null)
+    :bool (encode-bool (second v))
+    :utc (encode-utc (second v))
+    :gentime (encode-gentime (second v))
+    :utf8 (encode-utf8 (second v))
+    :printable (encode-printable (second v))
+    :ia5 (encode-ia5 (second v))
     :ctx (tlv (bit-or 0xA0 (second v)) (encode (nth v 2)))
     :ctx* (tlv (bit-or 0x80 (second v)) (nth v 2))
     :raw (second v)
@@ -187,7 +213,14 @@
       0x04 [[:octets body] end]
       0x05 [[:null] end]
       0x06 [[:oid (parse-oid-content bytes body-off len)] end]
+      0x01 [[:bool (= 0xFF (bit-and (aget body 0) 0xFF))] end]
+      0x0C [[:utf8 (bytes->str body)] end]
+      0x13 [[:printable (bytes->str body)] end]
+      0x16 [[:ia5 (bytes->str body)] end]
+      0x17 [[:utc (bytes->str body)] end]
+      0x18 [[:gentime (bytes->str body)] end]
       0x30 [(into [:seq] (parse-seq bytes body-off len)) end]
+      0x31 [(into [:set] (parse-seq bytes body-off len)) end]
       (cond
         (<= 0xA0 tag 0xBF) (let [[inner iend] (parse-value bytes body-off)]
                              [[:ctx (- tag 0xA0) inner] end])
