@@ -2,3 +2,6 @@
 .cache/
 target/
 *.jar
+mtc-bin
+mtc-bin.build/
+cert.der
