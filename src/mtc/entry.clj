@@ -76,7 +76,7 @@
   is a byte array (nil -> empty)."
   [extensions type payload]
   (bcat (encode-extensions extensions)
-        (byte-array [(unchecked-byte type)])
+        (u16 type)
         (or payload (byte-array 0))))
 
 (defn decode-mtc-log-entry
@@ -84,8 +84,8 @@
   :type n :payload bytes}."
   [bytes]
   (let [[extensions ext-end] (decode-extensions bytes 0)
-        type (u8 (aget bytes ext-end))
-        payload (slice bytes (inc ext-end) (- (alength bytes) (inc ext-end)))]
+        type (+ (* 256 (u8 (aget bytes ext-end))) (u8 (aget bytes (inc ext-end))))
+        payload (slice bytes (+ ext-end 2) (- (alength bytes) (+ ext-end 2)))]
     {:extensions extensions :type type :payload payload}))
 
 ;; --- TBSCertificateLogEntry (DER SEQUENCE) -----------------------------------
@@ -116,6 +116,30 @@
             (when issuer-unique-id [[:ctx* 1 issuer-unique-id]])
             (when subject-unique-id [[:ctx* 2 subject-unique-id]])
             (when extensions [[:ctx 3 [:raw extensions]]])))))
+
+(defn- tbs-field-values
+  "The DER field values of a TBSCertificateLogEntry, in order."
+  [{:keys [version issuer validity subject subject-public-key-algorithm
+           subject-public-key-info-hash issuer-unique-id subject-unique-id
+           extensions]}]
+  (concat
+    (when (and version (not (zero? version)))
+      [[:ctx 0 [:int version]]])
+    [[:raw issuer]
+     [:raw validity]
+     [:raw subject]
+     [:raw subject-public-key-algorithm]
+     [:octets subject-public-key-info-hash]]
+    (when issuer-unique-id [[:ctx* 1 issuer-unique-id]])
+    (when subject-unique-id [[:ctx* 2 subject-unique-id]])
+    (when extensions [[:ctx 3 [:raw extensions]]])))
+
+(defn encode-tbs-cert-log-entry-fields
+  "The contents octets of a TBSCertificateLogEntry: the DER encodings of its
+  fields concatenated, WITHOUT the outer SEQUENCE tag/length. This is what
+  tbs_cert_entry_data carries (RFC 5.2.1) and what the single-pass hash writes."
+  [m]
+  (apply bcat (map der/encode (tbs-field-values m))))
 
 (defn decode-tbs-cert-log-entry
   "Decode a DER TBSCertificateLogEntry into the same keyed map that

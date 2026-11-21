@@ -13,6 +13,10 @@
     (do (println (str "FAIL " label)) (println (str "  expected " (pr-str expected))) (println (str "  got      " (pr-str got))) (System/exit 1))))
 
 ;; --- MTCLogEntry ------------------------------------------------------------
+;; type is a 2-byte enum (RFC 5.2.1: values up to 2^16-1)
+(check "null entry wire" "00000000" (hex (e/encode-mtc-log-entry [] 0 nil)))
+(check "tbs entry wire" "00000001" (hex (e/encode-mtc-log-entry [] 1 nil)))
+
 (let [ext [[1 (.getBytes "aa" "UTF-8")] [300 (.getBytes "bb" "UTF-8")]]
       payload (.getBytes "tbs-bytes" "UTF-8")
       enc (e/encode-mtc-log-entry ext e/tbs-cert-entry payload)

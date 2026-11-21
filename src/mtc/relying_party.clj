@@ -2,12 +2,9 @@
 (ns mtc.relying-party
   "RFC Section 7.2: verifying a Merkle Tree Certificate signature.
 
-  This namespace implements the Merkle/log part of certificate
-  verification (steps 3-12 of RFC 7.2).  Building the full X.509
-  TBSCertificateLogEntry from a parsed X.509 Certificate is out of scope
-  here: the caller supplies the serial number, the decoded MTCProof, and
-  the encoded MTCLogEntry, which RFC 7.2 would otherwise assemble in a
-  single pass from the DER TBSCertificate.
+  verify takes a decoded MTCProof and the encoded MTCLogEntry; verify-certificate
+  takes a full DER X.509 Certificate, parses its TBSCertificate, constructs the
+  TBSCertificateLogEntry / MTCLogEntry (RFC 7.2 steps 7-8), and verifies.
 
   config keys:
     :ca-id              PEN-relative CA trust anchor ID arcs (e.g. [32473 1])
@@ -18,7 +15,10 @@
   (:require [mtc.bit :as bit]
             [mtc.merkle :as m]
             [mtc.subtree :as st]
-            [mtc.cosigner :as cos]))
+            [mtc.cosigner :as cos]
+            [mtc.certificate :as cert]
+            [mtc.x509 :as x]
+            [mtc.sha256 :as sha]))
 
 (defn log-id
   "The issuance log's trust anchor ID: ca-id arcs + 0 + log-number (RFC 5.2)."
@@ -28,26 +28,22 @@
 (defn- in-ranges? [serial ranges]
   (boolean
     (some (fn [[s e]] (and (bit/u64-<= (bit/u64 s) serial)
-                           (bit/u64-<= serial (bit/u64 (unchecked-subtract e 1)))))  ; [s, e)
+                           (bit/u64-<= serial (bit/u64 (unchecked-subtract e 1)))))
           ranges)))
 
-(defn verify
-  "Verify the MTC portion of a certificate signature. Returns true/false.
-  serial is a uint64 (Long); mtc-proof is a decoded MTCProof; entry is the
-  encoded MTCLogEntry bytes."
+(defn- verify-core
+  "RFC 7.2 steps 3-12, given the serial number, decoded MTCProof and entry hash."
   [{:keys [ca-id trusted-subtrees cosigner-verifiers cosigner-policy revoked-ranges]}
-   serial mtc-proof entry]
+   serial mtc-proof entry-hash]
   (try
     (let [serial (bit/u64 serial)
-          _ (when (seq revoked-ranges)
-              (when (in-ranges? serial revoked-ranges)
-                (throw (ex-info "serial revoked" {}))))
+          _ (when (and (seq revoked-ranges) (in-ranges? serial revoked-ranges))
+              (throw (ex-info "serial revoked" {})))
           index (bit-and serial 0xFFFFFFFFFFFF)
           log-number (unsigned-bit-shift-right serial 48)
           _ (when (zero? log-number)
               (throw (ex-info "log number zero" {})))
           log-id (log-id ca-id log-number)
-          entry-hash (m/leaf-hash entry)
           start (:start mtc-proof)
           end (:end mtc-proof)
           expected (st/evaluate-inclusion-proof start end index entry-hash
@@ -73,4 +69,24 @@
                           :when (cos/verify (:verify-fn v) (:public-key v) cst signature)]
                       arcs)]
           (boolean (cosigner-policy valid)))))
+    (catch Throwable _ false)))
+
+(defn verify
+  "Verify the MTC portion of a certificate given a decoded MTCProof and the
+  encoded MTCLogEntry bytes. serial is a uint64."
+  [config serial mtc-proof entry]
+  (verify-core config serial mtc-proof (m/leaf-hash entry)))
+
+(defn verify-certificate
+  "Verify a full DER X.509 Merkle Tree Certificate (RFC 7.2): parse the
+  TBSCertificate, reconstruct the entry, evaluate the inclusion proof, and
+  check trusted-subtree or cosigner policy."
+  [config cert-der]
+  (try
+    (let [cert (x/parse-certificate cert-der)
+          tbs (x/parse-tbs-certificate (:tbs-certificate cert))
+          serial (:serial-number tbs)
+          mtc-proof (cert/decode-mtc-proof (x/mtc-proof-bytes cert))
+          entry-hash (x/entry-hash-from-tbs sha/digest tbs (:extensions mtc-proof))]
+      (verify-core config serial mtc-proof entry-hash))
     (catch Throwable _ false)))

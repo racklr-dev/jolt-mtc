@@ -9,7 +9,9 @@
 
   Full RFC5280 name/value surface is out of scope — enough to build and
   parse the structured names and validity a test CA and relying party use."
-  (:require [mtc.der :as der]))
+  (:require [mtc.der :as der]
+            [mtc.entry :as entry]
+            [mtc.merkle :as m]))
 
 ;; --- Name -------------------------------------------------------------------
 ;; A Name is a vector of RDNs.  An RDN is a vector of [oid value] pairs.
@@ -78,3 +80,103 @@
       (when-not (= :oid (first oid-v))
         (throw (ex-info "AlgorithmIdentifier algorithm must be an OID" {})))
       [(second oid-v) params])))
+
+;; --- Certificate / TBSCertificate parsing (minimal) -------------------------
+
+(defn- u8 [b] (bit-and b 0xFF))
+
+(defn- slice [bytes off len]
+  (let [out (byte-array len)]
+    (dotimes [i len] (aset out i (aget bytes (+ off i))))
+    out))
+
+(defn parse-certificate
+  "Parse a DER X.509 Certificate into {:tbs-certificate :signature-algorithm
+  :signature-value} (the first two as full DER blobs, signature-value as the
+  BIT STRING content bytes)."
+  [bytes]
+  (when-not (= 0x30 (u8 (aget bytes 0)))
+    (throw (ex-info "Certificate must be a SEQUENCE" {})))
+  (let [[_ body _] (der/read-tlv bytes 0)
+        [tag1 _ off1] (der/read-tlv body 0)
+        [tag2 _ off2] (der/read-tlv body off1)
+        [tag3 sv off3] (der/read-tlv body off2)]
+    (when-not (= 0x30 tag1) (throw (ex-info "tbsCertificate must be a SEQUENCE" {:tag tag1})))
+    (when-not (= 0x30 tag2) (throw (ex-info "signatureAlgorithm must be a SEQUENCE" {:tag tag2})))
+    (when-not (= 0x03 tag3) (throw (ex-info "signatureValue must be a BIT STRING" {:tag tag3})))
+    {:tbs-certificate (slice body 0 off1)
+     :signature-algorithm (slice body off1 (- off2 off1))
+     :signature-value sv}))
+
+(defn mtc-proof-bytes
+  "The MTCProof bytes inside a certificate's signatureValue BIT STRING
+  (drop the leading unused-bits count byte)."
+  [cert]
+  (let [sv (:signature-value cert)]
+    (slice sv 1 (- (alength sv) 1))))
+
+(defn- spki-algorithm-field [spki-body]
+  (let [[tag _ off] (der/read-tlv spki-body 0)]
+    (when-not (= 0x30 tag) (throw (ex-info "SPKI algorithm must be a SEQUENCE" {:tag tag})))
+    (slice spki-body 0 off)))
+
+(defn parse-tbs-certificate
+  "Parse a DER TBSCertificate into a map. Opaque fields (issuer, validity,
+  subject, spki, spki-algorithm, signature) are full DER blobs; serial-number
+  and version are parsed; unique-ids/extensions are content bytes."
+  [bytes]
+  (when-not (= 0x30 (u8 (aget bytes 0)))
+    (throw (ex-info "TBSCertificate must be a SEQUENCE" {})))
+  (let [[_ body _] (der/read-tlv bytes 0)]
+    (loop [off 0 acc {} saw30 0]
+      (if (>= off (alength body))
+        acc
+        (let [[tag fbody fend] (der/read-tlv body off)
+              field (slice body off (- fend off))]
+          (case tag
+            0xA0 (let [[dv _] (der/decode fbody)]
+                   (recur fend (assoc acc :version (second dv)) saw30))
+            0x02 (recur fend (assoc acc :serial-number (der/decode-int fbody)) saw30)
+            0x30 (case saw30
+                   0 (recur fend (assoc acc :signature field) 1)
+                   1 (recur fend (assoc acc :issuer field) 2)
+                   2 (recur fend (assoc acc :validity field) 3)
+                   3 (recur fend (assoc acc :subject field) 4)
+                   4 (recur fend (assoc acc :spki field
+                                           :spki-algorithm (spki-algorithm-field fbody)) 5)
+                   (recur fend acc (inc saw30)))
+            0x81 (recur fend (assoc acc :issuer-unique-id fbody) saw30)
+            0x82 (recur fend (assoc acc :subject-unique-id fbody) saw30)
+            0xA3 (recur fend (assoc acc :extensions fbody) saw30)
+            (throw (ex-info "unexpected TBSCertificate field tag" {:tag tag}))))))))
+
+(defn entry-map-from-tbs
+  "Build the mtc.entry TBSCertificateLogEntry map from a parsed TBSCertificate
+  (RFC 7.2 step 7): copy version/issuer/validity/subject/unique-ids/extensions,
+  take the SPKI algorithm, and hash the SPKI."
+  [hash-fn tbs]
+  {:version (:version tbs)
+   :issuer (:issuer tbs)
+   :validity (:validity tbs)
+   :subject (:subject tbs)
+   :subject-public-key-algorithm (:spki-algorithm tbs)
+   :subject-public-key-info-hash (hash-fn (:spki tbs))
+   :issuer-unique-id (:issuer-unique-id tbs)
+   :subject-unique-id (:subject-unique-id tbs)
+   :extensions (:extensions tbs)})
+
+(defn mtc-log-entry-bytes-from-tbs
+  "Build the MTCLogEntry bytes from a parsed TBSCertificate (RFC 7.2 steps 7-8)."
+  [hash-fn tbs extensions]
+  (entry/encode-mtc-log-entry extensions entry/tbs-cert-entry
+                               (entry/encode-tbs-cert-log-entry-fields
+                                 (entry-map-from-tbs hash-fn tbs))))
+
+(defn entry-hash-from-tbs
+  "RFC 7.2 step 9, computed as the single-pass sequence: HASH(0x00 || entry),
+  where entry writes, in order, the MTCProof extensions field, the 2-byte
+  tbs_cert_entry enum, the version field (if any), issuer, validity, subject,
+  the SPKI algorithm, OCTET STRING(SPKI hash), and any remaining TBSCertificate
+  fields. hash-fn hashes the SPKI; the outer leaf hash is SHA-256."
+  [hash-fn tbs extensions]
+  (m/leaf-hash (mtc-log-entry-bytes-from-tbs hash-fn tbs extensions)))

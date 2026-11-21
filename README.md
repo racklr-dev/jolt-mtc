@@ -32,8 +32,11 @@ Namespaces (all passing `jolt run test/mtc/<test>.clj`):
 - `mtc.certificate` — MTCProof/Cosignature + serialNumber (RFC 6)
 - `mtc.ca` — MTCCertificationAuthority (RFC 5.5)
 - `mtc.landmarks` — landmark sequences + strict publish format (RFC 6.4)
-- `mtc.relying-party` — certificate verification (RFC 7.2)
+- `mtc.x509` — Name/Validity/AlgorithmIdentifier codec + Certificate/TBSCertificate parser
+- `mtc.relying-party` — certificate verification, including full DER cert
+  (verify-certificate, RFC 7.2)
 
-Out of scope (documented): full X.509 Certificate/Name/Validity codec,
-TLS/ACME wire integration, and concrete signature algorithms (the
-cosigner sign/verify seam is pluggable).
+Out of scope (documented): the full RFC5280 Name/value surface (only
+UTF8/Printable/IA5 strings, UTCTime/GeneralizedTime), the trust-anchor-ID
+DN construction, TLS/ACME wire integration, and concrete signature
+algorithms (the cosigner sign/verify seam is pluggable).

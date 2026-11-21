@@ -88,6 +88,11 @@
 (defn encode-printable [s] (encode-str-tlv 0x13 s))
 (defn encode-ia5 [s] (encode-str-tlv 0x16 s))
 
+(defn encode-bitstring
+  "DER BIT STRING with zero unused bits wrapping data."
+  [data]
+  (tlv 0x03 (bcat 0x00 data)))
+
 (defn- enc-oid-arc
   "Base-128 encode one OID arc (arc >= 0)."
   [arc]
@@ -147,6 +152,7 @@
     :utf8 (encode-utf8 (second v))
     :printable (encode-printable (second v))
     :ia5 (encode-ia5 (second v))
+    :bitstring (encode-bitstring (second v))
     :ctx (tlv (bit-or 0xA0 (second v)) (encode (nth v 2)))
     :ctx* (tlv (bit-or 0x80 (second v)) (nth v 2))
     :raw (second v)

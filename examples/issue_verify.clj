@@ -23,7 +23,7 @@
 (def spki-hash (sha/digest (.getBytes "subject-public-key-info-DER" "UTF-8")))
 
 (defn- tbs [i]
-  (entry/encode-tbs-cert-log-entry
+  (entry/encode-tbs-cert-log-entry-fields
     {:issuer issuer
      :validity validity
      :subject (x/encode-name [[[cn-oid [:utf8 (str "service-" i ".example.com")]]]])
