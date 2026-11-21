@@ -124,42 +124,43 @@
         entry (log-entry-bytes subject spki)
         new-log (log/append! (:log @state) entry)
         index (dec (log/tree-size new-log))
-        serial (cert/serial-number 1 index)
-        proof (log/inclusion-proof new-log 0 (log/tree-size new-log) index)
-        cst {:cosigner-name (cos/trust-anchor-name ca-id)
-             :timestamp 0
-             :log-origin (cos/trust-anchor-name (rp/log-id ca-id 1))
-             :start 0 :end (log/tree-size new-log)
-             :subtree-hash (log/root-hash new-log)}
-        cosig (cos/sign (sig/ed25519-signer) (:ca-key @state) cst)
-        witness-sigs
-        (mapv (fn [c]
-                (let [wcst {:cosigner-name (cos/trust-anchor-name (:id c))
-                            :timestamp 0
-                            :log-origin (cos/trust-anchor-name (rp/log-id ca-id 1))
-                            :start 0 :end (log/tree-size new-log)
-                            :subtree-hash (log/root-hash new-log)}
-                      resp (try
-                             (json/read-str
-                               (:body (http/post (str (:url c) "/cosign")
-                                                 {:body (json/write-str {"cosigned-subtree" (svc/b64 (cos/encode-cosigned-subtree wcst))})
-                                                  :content-type :json :as :string})))
-                             (catch Throwable e {:error (.getMessage e)}))]
-                  (if-let [sig (get resp "signature")]
-                    {:cosigner-id (cos/cosigner-id-bytes (:id c))
-                     :signature (.decode (java.util.Base64/getDecoder) sig)}
-                    (throw (ex-info (str "cosigner " (:id c) " refused: " (get resp "error")) {})))))
-              (:cosigners @state))
-        mtc-proof {:extensions [] :start 0 :end (log/tree-size new-log)
-                   :inclusion-proof proof
-                   :signatures (into [{:cosigner-id (cos/cosigner-id-bytes ca-id) :signature cosig}] witness-sigs)}
-        der (build-cert serial subject spki mtc-proof)]
-    (swap! state assoc :log new-log
-           :clients (assoc (:clients @state) index {:key (:private kp) :cert der}))
+        serial (cert/serial-number 1 index)]
+    ;; Commit the entry before cosigning, so witnesses sync to the new checkpoint.
+    (swap! state assoc :log new-log)
     (log/save-log new-log (path "log.bin"))
-    (write-bytes (path (str "client-" index ".p8")) (.getEncoded (:private kp)))
-    {:index index :serial serial
-     :root (svc/b64 (log/root-hash new-log))}))
+    (let [proof (log/inclusion-proof new-log 0 (log/tree-size new-log) index)
+          cst {:cosigner-name (cos/trust-anchor-name ca-id)
+               :timestamp 0
+               :log-origin (cos/trust-anchor-name (rp/log-id ca-id 1))
+               :start 0 :end (log/tree-size new-log)
+               :subtree-hash (log/root-hash new-log)}
+          cosig (cos/sign (sig/ed25519-signer) (:ca-key @state) cst)
+          witness-sigs
+          (mapv (fn [c]
+                  (let [wcst {:cosigner-name (cos/trust-anchor-name (:id c))
+                              :timestamp 0
+                              :log-origin (cos/trust-anchor-name (rp/log-id ca-id 1))
+                              :start 0 :end (log/tree-size new-log)
+                              :subtree-hash (log/root-hash new-log)}
+                        raw (:body (http/post (str (:url c) "/cosign")
+                                               {:body (json/write-str {"cosigned-subtree" (svc/b64 (cos/encode-cosigned-subtree wcst))})
+                                                :content-type :json :as :string
+                                                :throw-exceptions false}))
+                        resp (json/read-str raw)
+                        sig (get resp "signature")]
+                    (if sig
+                      {:cosigner-id (cos/cosigner-id-bytes (:id c))
+                       :signature (.decode (java.util.Base64/getDecoder) sig)}
+                      (throw (ex-info (str "cosigner " (:id c) " refused: " raw) {})))))
+                (:cosigners @state))
+          mtc-proof {:extensions [] :start 0 :end (log/tree-size new-log)
+                     :inclusion-proof proof
+                     :signatures (into [{:cosigner-id (cos/cosigner-id-bytes ca-id) :signature cosig}] witness-sigs)}
+          der (build-cert serial subject spki mtc-proof)]
+      (swap! state assoc :clients (assoc (:clients @state) index {:key (:private kp) :cert der}))
+      (write-bytes (path (str "client-" index ".p8")) (.getEncoded (:private kp)))
+      {:index index :serial serial
+       :root (svc/b64 (log/root-hash new-log))})))
 
 (defn- handler [state]
   (fn [req]
@@ -185,6 +186,11 @@
           (let [j (try (json/read-str (svc/body-str req)) (catch Throwable _ {}))
                 subject (or (get j "subject") "client.example.com")]
             (svc/json-resp (issue! state subject)))
+
+          (str/starts-with? path "/entries/")
+          (let [from (Long/parseLong (subs path 9))
+                entries (vec (:entries (:log @state)))]
+            (svc/json-resp (mapv svc/b64 (subvec entries from))))
 
           (str/starts-with? path "/cert/")
           (let [i (Long/parseLong (subs path 6))

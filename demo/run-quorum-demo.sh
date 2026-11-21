@@ -12,13 +12,13 @@ podman build -t mtc-cosigner -f demo/cosigner.Containerfile . >/dev/null 2>&1
 
 # three witness cosigners
 podman run -d --name mtc-w1 --network mtc-net -p 8081:8080 \
-  -e MTC_DATA_DIR=/data -e MTC_COSIGNER_ID=32473.1.101 \
+  -e MTC_DATA_DIR=/data -e MTC_CA_URL=http://mtc-ca:8080 -e MTC_COSIGNER_ID=32473.1.101 \
   -v "$PWD/demo/w1:/data" mtc-cosigner
 podman run -d --name mtc-w2 --network mtc-net -p 8082:8080 \
-  -e MTC_DATA_DIR=/data -e MTC_COSIGNER_ID=32473.1.102 \
+  -e MTC_DATA_DIR=/data -e MTC_CA_URL=http://mtc-ca:8080 -e MTC_COSIGNER_ID=32473.1.102 \
   -v "$PWD/demo/w2:/data" mtc-cosigner
 podman run -d --name mtc-w3 --network mtc-net -p 8083:8080 \
-  -e MTC_DATA_DIR=/data -e MTC_COSIGNER_ID=32473.1.103 \
+  -e MTC_DATA_DIR=/data -e MTC_CA_URL=http://mtc-ca:8080 -e MTC_COSIGNER_ID=32473.1.103 \
   -v "$PWD/demo/w3:/data" mtc-cosigner
 
 # CA requires its own cosignature + a quorum of 2 witnesses
