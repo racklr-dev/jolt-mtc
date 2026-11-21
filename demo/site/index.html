@@ -1,0 +1,11 @@
+<!doctype html>
+<html><head><title>MTC Demo Site</title></head>
+<body style="font-family: sans-serif; max-width: 42rem; margin: 4rem auto">
+<h1>🔐 Merkle Tree Certificates</h1>
+<p>You reached this page with a <strong>valid MTC certificate</strong>.</p>
+<p>This site is fronted by nginx, which delegated certificate verification to
+an <code>mtc.ca-server</code> sidecar via <code>auth_request</code> — a
+self-consistent, self-signing Merkle Tree CA running in this pod.</p>
+<hr>
+<pre>GET /auth  ->  mtc.ca-server verifies the X-MTC-Cert header against its log</pre>
+</body></html>

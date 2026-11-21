@@ -6,5 +6,8 @@ mtc-bin
 mtc-bin.build/
 mtc-service
 mtc-service.build/
+mtc-ca
+mtc-ca.build/
 cert.der
 demo/certs/
+demo/data/
