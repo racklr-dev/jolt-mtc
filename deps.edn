@@ -1,1 +1,9 @@
-{:paths ["src"]}
+{:paths ["src"]
+
+ ;; Real signature algorithms + full X.509 parsing, via jolt-lang/crypto
+ ;; (OpenSSL FFI). Opt-in so the pure Merkle core stays dependency-free.
+ :aliases
+ {:crypto
+  {:extra-deps {jolt-lang/jolt-crypto
+                {:git/url "https://github.com/jolt-lang/crypto"
+                 :git/sha "5f99b52d3d2c06a6acd8e15226d3e5818213a402"}}}}}

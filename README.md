@@ -13,7 +13,7 @@ mtc/
   rfc/
     draft-...-08.txt        the full RFC text
     sections/               the RFC split into per-section files
-  src/mtc/                  stub namespaces (one per RFC concern)
+  src/mtc/                  the library namespaces (one per RFC concern)
   test/mtc/                 test scripts run with `jolt run`
 ```
 
@@ -29,6 +29,7 @@ Namespaces (all passing `jolt run test/mtc/<test>.clj`):
 - `mtc.entry` — MTCLogEntry + TBSCertificateLogEntry (RFC 5.2.1)
 - `mtc.log` — append-only issuance log with incremental Merkle tree head
 - `mtc.cosigner` — CosignedSubtree sign/verify (RFC 5.3)
+- `mtc.sig` — real signature algorithms (Ed25519/ECDSA/RSA) via jolt-lang/crypto
 - `mtc.certificate` — MTCProof/Cosignature + serialNumber (RFC 6)
 - `mtc.ca` — MTCCertificationAuthority (RFC 5.5)
 - `mtc.landmarks` — landmark sequences + strict publish format (RFC 6.4)
@@ -36,7 +37,12 @@ Namespaces (all passing `jolt run test/mtc/<test>.clj`):
 - `mtc.relying-party` — certificate verification, including full DER cert
   (verify-certificate, RFC 7.2)
 
-Out of scope (documented): the full RFC5280 Name/value surface (only
-UTF8/Printable/IA5 strings, UTCTime/GeneralizedTime), the trust-anchor-ID
-DN construction, TLS/ACME wire integration, and concrete signature
-algorithms (the cosigner sign/verify seam is pluggable).
+Cryptography is opt-in: the pure Merkle/log/certificate core has no
+runtime dependencies, and `mtc.sig` pulls real signature algorithms
+(Ed25519/ECDSA/RSA) and full X.509 parsing from
+[jolt-lang/crypto](https://github.com/jolt-lang/crypto) (OpenSSL) behind the
+`:crypto` alias (`jolt -A:crypto ...`).
+
+TLS (RFC 8) and ACME (RFC 9) wire integration are the consumer's transport
+concern, not part of this certificate library: the library produces and
+verifies the certificate structures those protocols carry.
