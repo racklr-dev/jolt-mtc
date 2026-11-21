@@ -58,5 +58,32 @@
 (defn inclusion-proof [log start end index]
   (m/inclusion-path-tbl (node-table log) (- index start) start end))
 
+(defn save-log
+  "Persist a log's entries to a file: [4-byte big-endian length][entry]..."
+  [log path]
+  (let [out (java.io.FileOutputStream. path)]
+    (doseq [e (:entries log)]
+      (let [len (alength e)]
+        (dotimes [i 4]
+          (.write out (bit-and (bit-shift-right len (* 8 (- 3 i))) 0xFF)))
+        (.write out e)))
+    (.close out))
+  log)
+
+(defn load-log
+  "Load a log from a file written by save-log, rebuilding the Merkle tree head."
+  [number path]
+  (let [bs (try (.readAllBytes (java.io.FileInputStream. path))
+                (catch Throwable _ nil))]
+    (if (or (nil? bs) (zero? (alength bs)))
+      (new-log number)
+      (loop [off 0 acc (new-log number)]
+        (if (>= off (alength bs))
+          acc
+          (let [len (loop [i 0 n 0]
+                      (if (= i 4) n (recur (inc i) (+ (* n 256) (bit-and (aget bs (+ off i)) 0xFF)))))
+                entry (byte-array (map (fn [i] (aget bs (+ off 4 i))) (range len)))]
+            (recur (+ off 4 len) (append! acc entry))))))))
+
 (defn consistency-proof [log start end]
   (st/subtree-proof-tbl (node-table log) start end (tree-size log)))

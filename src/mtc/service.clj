@@ -180,7 +180,7 @@
         (if ok
           (json-resp {"allowed" true})
           {:status 401 :headers {"Content-Type" "application/json"}
-           :body (json/write-str {"denied" {"status" {"code" 401}}})})))
+           :body (json/write-str {"denied" {"status" {"code" 401}}})}))
 
       :else {:status 404 :body (str "not found: " path " " method)})))
 
