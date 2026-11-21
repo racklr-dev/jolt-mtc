@@ -15,6 +15,50 @@ cosigners, quorum policies, revocation, and verification — as pure Clojure
 that runs on [jolt](https://github.com/jolt-lang/jolt) (Clojure on Chez Scheme,
 no JVM), and as standalone native binaries.
 
+## Quickstart
+
+Make your first self-signed Merkle Tree Certificate in three commands.
+You need a [jolt](https://github.com/jolt-lang/jolt) binary on your `PATH`
+(`jolt --version`).
+
+```bash
+# 1. build the CLI (needs the :crypto alias for real Ed25519 keys)
+JOLT_SKIP_MIN_VERSION=1 jolt -A:crypto build -m mtc.cli -o mtc-cli
+
+# 2. issue a self-signed MTC for a name — generates a keypair, writes PEM files
+./mtc-cli issue web.example.com
+# => issued self-signed MTC for web.example.com
+# =>   cert:   web.example.com.crt
+# =>   key:    web.example.com.key
+# =>   serial: 281474976710656
+# =>   self-verified: true
+
+# 3. any X.509 tool can parse it (though only this library verifies it)
+openssl x509 -in web.example.com.crt -noout -subject -serial
+# => subject=CN=web.example.com
+# => serial=01000000000000
+```
+
+Prefer to run without compiling? The same command works interpreted:
+`jolt -A:crypto run -m mtc.cli issue web.example.com`.
+
+## Concepts in sixty seconds
+
+* **Issuance log** — an append-only Merkle tree of every certificate a CA has
+  issued. Its root is the CA's checkpoint.
+* **Subtree** — a contiguous range of log entries, identified by `[start, end)`.
+* **Inclusion proof** — the hashes proving one entry is inside a subtree; this
+  is what replaces the CA signature in a Merkle Tree Certificate.
+* **Cosigner** — a party that signs a subtree. The CA cosigner provides
+  authenticity; additional **witness** cosigners provide transparency and
+  each follow their own view of the log, refusing forks.
+* **Quorum** — the set of cosignatures a relying party requires before it
+  trusts a subtree (e.g. "the CA plus at least 2 witnesses").
+* **Landmark** — a named, expired snapshot of the log that lets certificates
+  be issued later against a larger, predistributed subtree — smaller proofs,
+  no per-certificate cosignatures.
+* **serialNumber** — `(log_number << 48) | entry_index`.
+
 ## What you can use it for
 
 ### 1. A self-signing certificate authority
@@ -89,12 +133,16 @@ serves the page (200); without one it returns 401.
 
 ### 4. A command-line tool
 
-`mtc.cli` compiles to a single self-contained binary that runs a demo CA,
-issues a certificate, verifies it, and writes `cert.der`:
+`mtc.cli` compiles to a single self-contained binary. Its `issue` subcommand
+creates a self-signed MTC in one step — generate a real Ed25519 keypair,
+self-sign, and write the PEM files:
 
 ```bash
-jolt build -m mtc.cli -o mtc-bin
-./mtc-bin 7          # issue for entry 7, verify, write cert.der
+JOLT_SKIP_MIN_VERSION=1 jolt -A:crypto build -m mtc.cli -o mtc-cli
+
+mtc-cli issue web.example.com           # -> web.example.com.crt + .key
+mtc-cli issue web.example.com /tmp/web  # choose the output prefix
+mtc-cli demo 7                          # fixed 20-entry demo
 ```
 
 ### 5. As a Clojure library
@@ -223,3 +271,16 @@ inside a handshake (RFC §8's custom verifier is the right home for that, and
 stock OpenSSL/nginx/envoy reject `id-alg-mtcProof` certs as transport certs),
 and the §12.2.1 log-failure recovery flow, which is defined by the
 `trust-anchor-ids` draft rather than this one.
+
+## Where to go next
+
+* The spec: [`draft-ietf-plants-merkle-tree-certs-08`](https://www.ietf.org/archive/id/draft-ietf-plants-merkle-tree-certs-08.txt) —
+  and its sibling [`draft-ietf-tls-trust-anchor-ids`](https://www.ietf.org/archive/id/draft-ietf-tls-trust-anchor-ids-07.txt),
+  which defines trust-anchor IDs and the `trust_anchors` TLS extension.
+* The code: `src/mtc/` is small and commented; `mtc.relying-party/verify` and
+  `mtc.ca-server/issue!` are the best two entry points to read first.
+* The demos: `demo/run-quorum-demo.sh` (CA + 3 witnesses + nginx) is the
+  richest end-to-end example.
+* [jolt](https://github.com/jolt-lang/jolt) and its
+  [docs](https://jolt-lang.net/docs) — how the Clojure-on-Chez runtime and
+  `jolt build` work.
