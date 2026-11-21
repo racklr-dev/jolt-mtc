@@ -4,6 +4,7 @@
 (ns mtc.example.issue-verify
   (:require [clojure.string :as str]
             [mtc.der :as der]
+            [mtc.x509 :as x]
             [mtc.entry :as entry]
             [mtc.log :as log]
             [mtc.certificate :as cert]
@@ -14,23 +15,18 @@
 
 (defn hex [b] (apply str (map (fn [x] (format "%02x" (bit-and x 0xff))) b)))
 
-;; --- structured Name / Validity / AlgorithmIdentifier (inline for now) -----
+;; --- structured Name / Validity / AlgorithmIdentifier -----------------------
 (def cn-oid [2 5 4 3])
-(defn- atv [oid value] [:seq [:oid oid] value])
-(defn- rdn [oid s] [:set (atv oid [:utf8 s])])
-(defn- make-name [& rdns] (into [:seq] rdns))
-
-(def issuer  (der/encode (make-name (rdn cn-oid "MTC Test CA"))))
-(def subject (der/encode (make-name (rdn cn-oid "example.com"))))
-(def validity (der/encode [:seq [:utc "240101000000Z"] [:utc "260101000000Z"]]))
-(def spki-alg (der/encode [:seq [:oid [1 2 840 113549 1 1 1]] [:null]]))
+(def issuer  (x/encode-name [[[cn-oid [:utf8 "MTC Test CA"]]]]))
+(def validity (x/encode-validity [:utc "240101000000Z"] [:utc "260101000000Z"]))
+(def spki-alg (x/encode-alg-id [1 2 840 113549 1 1 1] nil))
 (def spki-hash (sha/digest (.getBytes "subject-public-key-info-DER" "UTF-8")))
 
 (defn- tbs [i]
   (entry/encode-tbs-cert-log-entry
     {:issuer issuer
      :validity validity
-     :subject (der/encode (make-name (rdn cn-oid (str "service-" i ".example.com"))))
+     :subject (x/encode-name [[[cn-oid [:utf8 (str "service-" i ".example.com")]]]])
      :subject-public-key-algorithm spki-alg
      :subject-public-key-info-hash spki-hash}))
 
