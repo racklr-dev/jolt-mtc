@@ -8,7 +8,7 @@ podman network create mtc-net >/dev/null
 
 podman build -q -t mtc-sidecar -f demo/sidecar.Containerfile .
 podman run -d --name mtc-sidecar --network mtc-net -p 8080:8080 mtc-sidecar
-podman run -d --name mtc-envoy --network mtc-net -p 10000:10000 \
+podman run -d --name mtc-envoy --network mtc-net -p 10000:10000 -p 9901:9901 \
   -v "$PWD/demo/envoy.yaml:/etc/envoy/envoy.yaml:ro" \
   docker.io/envoyproxy/envoy:v1.31-latest >/dev/null
 

@@ -1,3 +1,7 @@
+admin:
+  address:
+    socket_address: { address: 0.0.0.0, port_value: 9901 }
+
 static_resources:
   listeners:
   - name: listener_0
@@ -25,6 +29,9 @@ static_resources:
           - name: envoy.filters.http.ext_authz
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+              allowed_headers:
+                patterns:
+                - exact: x-mtc-cert
               http_service:
                 server_uri:
                   uri: http://mtc-sidecar:8080

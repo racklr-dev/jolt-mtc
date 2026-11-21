@@ -171,15 +171,13 @@
         {:status (if ok 200 401) :body (if ok "ok" "unauthorized")})
 
       (str/starts-with? path "/ext_authz")
-      (let [s (body-str req)
-            j (try (json/read-str s) (catch Throwable _ {}))
-            cert (or (get-in j ["attributes" "source" "certificate"])
-                     (get-in j ["attributes" "request" "http" "headers" "x-mtc-cert"]))
+      (let [cert (get-in req [:headers "x-mtc-cert"])
             der (when cert (pem->der (url-decode cert)))
             ok (and der (:valid (verify* (:config state) der)))]
         (if ok
           (json-resp {"allowed" true})
-          (json-resp {"denied" {"status" {"code" 16}}}))
+          {:status 401 :headers {"Content-Type" "application/json"}
+           :body (json/write-str {"denied" true})}))
 
       :else {:status 404 :body (str "not found: " path " " method)})))
 
