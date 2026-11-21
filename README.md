@@ -1,51 +1,225 @@
-# Merkle Tree Certificates (draft-ietf-plants-merkle-tree-certs-08) — jolt test libraries
+# Merkle Tree Certificates — a jolt library
 
-A jolt library implementing the subtree/log/certificate algorithms of
-[IETF Merkle Tree Certificates](https://www.ietf.org/archive/id/draft-ietf-plants-merkle-tree-certs-08.txt)
-(draft-ietf-plants-merkle-tree-certs-08), built as testable pure functions.
+> **⚠ Experimental.** This implements
+> [`draft-ietf-plants-merkle-tree-certs-08`](https://www.ietf.org/archive/id/draft-ietf-plants-merkle-tree-certs-08.txt)
+> (November 2026), an *Internet-Draft*, not a published RFC. The wire format
+> and OIDs can still change between drafts. Do **not** use it for anything you
+> would not be comfortable losing. Treat it as a reference implementation and
+> a playground for building Merkle Tree Certificate tooling.
 
-Layout:
+Merkle Tree Certificates (MTC) are X.509 certificates whose signature is an
+**inclusion proof** into an append-only issuance log, plus a quorum of
+cosignatures over that log's subtrees. This library implements the full
+normative surface of the draft — subtrees, logs, certificates, landmarks,
+cosigners, quorum policies, revocation, and verification — as pure Clojure
+that runs on [jolt](https://github.com/jolt-lang/jolt) (Clojure on Chez Scheme,
+no JVM), and as standalone native binaries.
+
+## What you can use it for
+
+### 1. A self-signing certificate authority
+
+`mtc.ca-server` is a deployable CA that persists its log and signing key and
+issues standalone certificates on demand:
+
+```bash
+MTC_DATA_DIR=/data jolt -A:server run -m mtc.ca-server
+
+# issue a certificate for a subject
+curl -X POST localhost:8080/issue -d '{"subject":"web.example.com"}'
+# => {"index":0,"serial":281474976710656,"root":"…"}
+
+curl localhost:8080/cert/0 -o cert.pem      # the X.509 certificate
+curl localhost:8080/key/0  -o key.pem       # the matching private key
+```
+
+OpenSSL can parse the result — `openssl x509 -in cert.pem -noout -text` shows
+the trust-anchor-ID issuer, the `id-alg-mtcProof` signature algorithm, and the
+Ed25519 subject key. It cannot *verify* it: that is what this library is for.
+
+### 2. Transparency via a cosigner quorum
+
+A CA alone can lie about its log. The draft's answer is additional
+witness/mirror cosigners that each follow their own append-only view of the
+log and only sign subtrees consistent with it:
+
+```bash
+MTC_COSIGNER_ID=32473.1.101 MTC_CA_URL=http://ca:8080 jolt -A:server run -m mtc.cosigner-server
+```
+
+The CA (`MTC_COSIGNERS=…, MTC_QUORUM=2`) collects witness cosignatures over
+HTTP into every certificate, and the verifier accepts a certificate only when
+the CA *and* a quorum of witnesses signed. A witness refuses to sign if the
+CA's checkpoint no longer matches the witness's own view — i.e. a fork.
+
+### 3. A verification sidecar in front of a proxy
+
+The same service verifies presented certificates. It plugs into two widely
+used proxies without changing them:
+
+* **nginx** — `auth_request`:
+
+  ```nginx
+  location = /auth {
+    internal;
+    proxy_pass http://mtc:8080/auth;
+    proxy_set_header X-Client-Cert $http_x_mtc_cert;
+  }
+  location /protected {
+    auth_request /auth;
+    root /site; index index.html;
+  }
+  ```
+
+* **envoy** — `ext_authz` (HTTP service):
+
+  ```yaml
+  - name: envoy.filters.http.ext_authz
+    typed_config:
+      "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+      allowed_headers:
+        patterns: [{ exact: x-mtc-cert }]
+      http_service:
+        server_uri: { uri: http://mtc:8080, cluster: ext_authz_cluster, timeout: 5s }
+        path_prefix: /ext_authz
+  ```
+
+Both are proven end-to-end in `demo/`: with a valid MTC certificate the proxy
+serves the page (200); without one it returns 401.
+
+### 4. A command-line tool
+
+`mtc.cli` compiles to a single self-contained binary that runs a demo CA,
+issues a certificate, verifies it, and writes `cert.der`:
+
+```bash
+jolt build -m mtc.cli -o mtc-bin
+./mtc-bin 7          # issue for entry 7, verify, write cert.der
+```
+
+### 5. As a Clojure library
+
+The core is dependency-free. Add it to a consumer project and call the
+namespaces directly:
+
+```clojure
+{:deps {mtc {:local/root "../mtc"}}}
+```
+
+```clojure
+(require '[mtc.log] '[mtc.certificate] '[mtc.relying-party])
+```
+
+## Layout
 
 ```
 mtc/
-  deps.edn                  jolt project (paths: src)
-  PLAN.md                   how we tackle this in jolt
-  rfc/
-    draft-...-08.txt        the full RFC text
-    sections/               the RFC split into per-section files
-  src/mtc/                  the library namespaces (one per RFC concern)
-  test/mtc/                 test scripts run with `jolt run`
+  src/mtc/
+    bit, sha256        bit/uint64 primitives; pure SHA-256
+    merkle, subtree    RFC9162 tree + RFC §4 inclusion/consistency/covering
+    der, x509          DER codec + Name/Validity/Certificate parsing
+    tls, entry         TLS-presentation primitives; MTCLogEntry/TBSCertificateLogEntry
+    log                append-only issuance log (persistent)
+    cosigner, sig      CosignedSubtree; real Ed25519/ECDSA/RSA via jolt-crypto
+    certificate        MTCProof/Cosignature, serialNumber, GREASE
+    ca                 MTCCertificationAuthority extension
+    landmarks          landmark sequences, publish format, landmark-relative certs
+    anchors, iana      trust-anchor IDs, TLS trust_anchors, IANA registries
+    acme               ACME link relation + content type
+    policy             cosigner policies (quorum)
+    relying-party      verification (full DER cert + single-pass hash)
+    service            HTTP verification sidecar
+    ca-server          deployable self-signing CA (+ revocation)
+    cosigner-server    standalone witness cosigner
+    cli                demo CLI
+  test/mtc/            20+ test scripts, incl. the RFC's own vectors
+  demo/                nginx / envoy / quorum podman demos
 ```
 
-Status: **full RFC implementation (subtree core + log/certificate layer).**
+## Cryptography
 
-Namespaces (all passing `jolt run test/mtc/<test>.clj`):
+The core is pure Clojure and needs nothing at runtime. Real signatures come
+from [jolt-lang/crypto](https://github.com/jolt-lang/crypto) (OpenSSL 3) and
+are opt-in:
 
-- `mtc.bit`, `mtc.sha256`, `mtc.merkle`, `mtc.subtree`, `mtc.covering` —
-  RFC 4 + Appendix B/C, verified against the RFC's accumulated and
-  large-tree test vectors
-- `mtc.der` — minimal DER (INTEGER/OCTET STRING/OID/SEQUENCE/NULL/context)
-- `mtc.tls` — big-endian TLS presentation primitives
-- `mtc.entry` — MTCLogEntry + TBSCertificateLogEntry (RFC 5.2.1)
-- `mtc.log` — append-only issuance log with incremental Merkle tree head
-- `mtc.cosigner` — CosignedSubtree sign/verify (RFC 5.3)
-- `mtc.sig` — real signature algorithms (Ed25519/ECDSA/RSA) via jolt-lang/crypto
-- `mtc.certificate` — MTCProof/Cosignature + serialNumber (RFC 6)
-- `mtc.ca` — MTCCertificationAuthority + its X.509 Extension (RFC 5.5)
-- `mtc.landmarks` — landmark sequences + strict publish format (RFC 6.4)
-- `mtc.anchors` — trust anchor IDs + the TLS trust_anchors extension (RFC 5.1/8)
-- `mtc.acme` — ACME link relation + content type (RFC 9)
-- `mtc.iana` — the RFC 13 IANA OIDs and registry values
-- `mtc.x509` — Name/Validity/AlgorithmIdentifier codec + Certificate/TBSCertificate parser
-- `mtc.relying-party` — certificate verification, including full DER cert
-  (verify-certificate, RFC 7.2)
+* `jolt -A:crypto …` — pulls jolt-crypto (Ed25519/ECDSA/RSA) for `mtc.sig`.
+* `jolt -A:server …` — crypto + `ring-chez-adapter` (HTTP) + `jolt.http-client`.
 
-Cryptography is opt-in: the pure Merkle/log/certificate core has no
-runtime dependencies, and `mtc.sig` pulls real signature algorithms
-(Ed25519/ECDSA/RSA) and full X.509 parsing from
-[jolt-lang/crypto](https://github.com/jolt-lang/crypto) (OpenSSL) behind the
-`:crypto` alias (`jolt -A:crypto ...`).
+jolt-crypto currently declares `:jolt/min-version 0.8.0`; on a jolt build that
+reports an older version but has the needed runtime, set
+`JOLT_SKIP_MIN_VERSION=1`.
 
-TLS (RFC 8) and ACME (RFC 9) wire integration are the consumer's transport
-concern, not part of this certificate library: the library produces and
-verifies the certificate structures those protocols carry.
+## Building binaries
+
+`jolt build` turns any namespace with a `-main` into a standalone native
+binary (no JVM, no runtime):
+
+```bash
+jolt build -m mtc.cli -o mtc-bin          # pure core
+jolt -A:server build -m mtc.ca-server -o mtc-ca   # CA service
+jolt -A:server build -m mtc.cosigner-server -o mtc-cosigner
+```
+
+These binaries need only a C library (`glibc`) plus, for `-A:server`, OpenSSL 3
+and zlib/zstd at runtime — the `demo/*.Containerfile`s install exactly those.
+
+The default build targets the host. `--target <machine>` cross-compiles for
+another Chez Scheme machine once you've prepared a target pack (see
+jolt's `tools/cross-compile`):
+
+| Machine | Platform |
+|---|---|
+| `ta6le` | x86-64 Linux |
+| `ta6nt` | x86-64 Windows |
+| `ta6osx` | x86-64 macOS |
+| `tarm64le` | ARM64 Linux |
+| `tarm64osx` | ARM64 macOS (Apple Silicon) |
+| `a6le` | ARMv7 Linux |
+| `i3le` | x86 (32-bit) Linux |
+
+Other Chez machine types are available too. Caveat: cross-compiling a binary
+that carries `:jolt/native` libraries (crypto, http-client) is not yet
+supported — those must be present on the target host and loaded at runtime.
+
+## Running the demos
+
+```bash
+cd mtc
+
+# demo website: CA + nginx site, cert -> 200, none -> 401
+bash demo/run-site-demo.sh
+
+# quorum: CA + 3 witnesses (quorum 2) + nginx site
+bash demo/run-quorum-demo.sh
+
+# envoy ext_authz
+bash demo/run-envoy-demo.sh
+```
+
+All three use podman. (`podman play kube` needs `catatonit` on `$PATH`; the
+scripts use `podman run` on a shared network instead.)
+
+## Verification
+
+```bash
+cd mtc
+for t in test/mtc/*_test.clj; do jolt run "$t"; done
+```
+
+The suite includes the draft's own test vectors (Appendix C: accumulated
+hashes, large-tree validity/covering, SHA-256 KATs) plus round-trip and
+negative tests for every layer.
+
+## Status and honest limits
+
+Implemented and tested: the full normative surface — subtree proofs, logs,
+entries, cosigners, quorum policies, certificates, landmark sequences and
+landmark-relative certificates, revocation ranges, the TLS trust_anchors
+extension, and the ACME/IANA constants — plus working nginx and envoy
+integrations and a multi-witness deployment.
+
+Not here (deliberately): TLS-stack code that can *natively* verify MTC certs
+inside a handshake (RFC §8's custom verifier is the right home for that, and
+stock OpenSSL/nginx/envoy reject `id-alg-mtcProof` certs as transport certs),
+and the §12.2.1 log-failure recovery flow, which is defined by the
+`trust-anchor-ids` draft rather than this one.
