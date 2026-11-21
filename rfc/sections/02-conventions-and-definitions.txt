@@ -1,0 +1,156 @@
+2.  Conventions and Definitions
+
+   The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+   "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and
+   "OPTIONAL" in this document are to be interpreted as described in
+   BCP 14 [RFC2119] [RFC8174] when, and only when, they appear in all
+   capitals, as shown here.
+
+   This document additionally uses the TLS presentation language defined
+   in Section 3 of [RFC9846], as well as the notation defined in
+   Section 2.1.1 of [RFC9162].  It extends the numeric types defined in
+   Section 3.3 of [RFC9846] with a big-endian, 48-bit integer:
+
+   uint8 uint48[6];
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                   [Page 6]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   U+ followed by four hexadecimal characters denotes a Unicode
+   codepoint, to be encoded in UTF-8 [RFC3629]. 0x followed by two
+   hexadecimal characters denotes a byte value in the 0-255 range.
+
+   The _decimal representation_ of a non-negative integer is its base-
+   ten representation, written with the ASCII digits 0 through 9 (U+0030
+   through U+0039).  Zero is written as the single digit 0, and no other
+   value is written with a leading 0.
+
+   [start, end), where start <= end, denotes the half-open interval
+   containing integers x such that start <= x < end.
+
+   Given a non-negative integer n,
+
+   *  LSB(n) refers to the least-significant bit of n's binary
+      representation.  Equivalently, it is the remainder when n is
+      divided by 2.
+
+   *  BIT_WIDTH(n) refers to the smallest number of bits needed to
+      represent n.  BIT_WIDTH(0) is zero.
+
+   *  POPCOUNT(n) refers to the number of set bits in n's binary
+      representation.
+
+   *  BIT_CEIL(n) refers to the smallest power of 2 that is greater or
+      equal to n.
+
+   To _left-shift_ a non-negative integer n is to shift each bit in its
+   binary representation to one upper position.  Equivalently, it is n
+   times 2.  Given non-negative integers a and b, a << b refers to a
+   left-shifted b times.
+
+   To _right-shift_ a non-negative integer n is to shift each bit in its
+   binary representation to one lower position, discarding the least-
+   significant bit.  Equivalently, it is the floor of n divided by 2.
+   Given non-negative integers a and b, a >> b refers to a right-shifted
+   b times.
+
+   Given two non-negative integers a and b, a & b refers to the non-
+   negative integer such that each bit position is set if the
+   corresponding bit is set in both a and b, and unset otherwise.  This
+   is commonly referred to as the bitwise AND operator.
+
+2.1.  Terminology and Roles
+
+   This document discusses the following roles:
+
+   Authenticating party:  The party that authenticates itself in the
+
+
+
+Benjamin, et al.           Expires 6 May 2027                   [Page 7]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+      protocol.  In TLS, this is the side sending the Certificate and
+      CertificateVerify message.
+
+   Certification authority (CA):  The service that issues certificates
+      to the authenticating party, after performing some validation
+      process on the certificate contents.
+
+   Relying party:  The party to whom the authenticating party presents
+      its identity.  In TLS, this is the side receiving the Certificate
+      and CertificateVerify message.
+
+   Monitor:  Parties who watch logs for certificates of interest,
+      analogous to the role in Section 8.2 of [RFC9162].
+
+   Issuance log:  A log, maintained by the CA, containing certification
+      statements issued by that CA.  A CA operates some number of
+      issuance logs, which together contain all statements issued by
+      that CA.
+
+   Cosigner:  A service that signs views of an issuance log, to assert
+      correct operation and other properties about the entries.
+
+   Additionally, there are several terms used throughout this document
+   to describe this proposal.  This section provides an overview.  They
+   will be further defined and discussed in detail throughout the
+   document.
+
+   Checkpoint:  A description of the complete state of the log at some
+      time.
+
+   Entry:  An individual element of the log, describing information
+      which the CA has validated and certified.
+
+   Subtree:  A smaller Merkle Tree over a portion of the log, defined by
+      an interior node of some snapshot of the log.  Subtrees can be
+      efficiently shown to be consistent with the whole log.
+
+   Inclusion proof:  A sequence of hashes that efficiently proves some
+      entry is contained in some checkpoint or subtree.
+
+   Consistency proof:  A sequence of hashes that efficiently proves a
+      checkpoint or subtree is contained within another checkpoint.
+
+   Cosignature:  A signature from either the CA or other cosigner, over
+      some checkpoint or subtree.
+
+   Landmark:  One of a sequence of tree sizes, infrequently chosen and
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                   [Page 8]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+      used to calculate landmark subtrees for predistribution to relying
+      parties.
+
+   Landmark subtree:  One of the two (possibly empty) subtrees
+      determined by an interval between two landmarks.  Predistributed
+      and used as the basis for landmark-relative certificates.
+
+   Standalone certificate:  A certificate containing an inclusion proof
+      to some subtree, and several cosignatures over that subtree.
+
+   Landmark-relative certificate:  An optimized certificate containing
+      an inclusion proof to a landmark subtree.  The landmark subtree is
+      assumed to be known to the relying party, rather than
+      authenticated by cosignatures.
+
+   Directly-signed certificate:  A certificate issued using the
+      existing, non-MTC construction, where the TBSCertificate is passed
+      directly to the private key's signing operation.
+

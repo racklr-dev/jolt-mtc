@@ -1,0 +1,489 @@
+6.  Certificates
+
+   This section defines how to construct Merkle Tree Certificates, which
+   are X.509 Certificates [RFC5280] that assert the information in an
+   issuance log entry.
+
+6.1.  Certificate Inputs
+
+   A Merkle Tree Certificate is constructed from the following inputs:
+
+   *  A TBSCertificateLogEntry (Section 5.2.1) contained in one of the
+      CA's issuance logs (Section 5.2)
+
+   *  A subject public key whose hash matches the TBSCertificateLogEntry
+
+   *  The log_number and the zero-based entry index of that log entry
+      within the issuance log, used to construct the certificate's
+      serialNumber (Section 6.2).
+
+   *  An MTCProof (Section 6.2) proving the entry's inclusion in a
+      subtree, along with zero or more signatures (Section 5.3) over
+      that subtree, which together satisfy relying party requirements
+      (Section 7.3)
+
+   By varying the choice of subtree and signatures, there can be
+   multiple ways to prove the entry is in the log, and thus certified by
+   the CA.  Section 6.2 defines how a certificate is constructed based
+   on those choices.  Section 6.3 and Section 6.4 define two profiles of
+   Merkle Tree Certificates, standalone certificates and landmark-
+   relative certificates, and how to select the subtree and signatures
+   for them.
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 39]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+6.2.  Certificate Format
+
+   The information is encoded in an X.509 Certificate [RFC5280] as
+   follows:
+
+   The TBSCertificate's version, issuer, validity, subject,
+   issuerUniqueID, subjectUniqueID, and extensions MUST be equal to the
+   corresponding fields of the TBSCertificateLogEntry.  If any of
+   issuerUniqueID, subjectUniqueID, or extensions is absent in the
+   TBSCertificateLogEntry, the corresponding field MUST be absent in the
+   TBSCertificate.  Per Section 5.2.1, this means issuer MUST be the
+   issuance log's CA ID as a PKIX distinguished name, as described in
+   Section 4.1 of [I-D.ietf-tls-trust-anchor-ids].
+
+   The TBSCertificate's serialNumber is constructed from the zero-based
+   index of the TBSCertificateLogEntry in the log and the log's number
+   (Section 5.2).  The serialNumber MUST be equal to (log_number <<
+   48) | index.  All serial numbers constructed in this way will be
+   positive and at most 2^64-1.
+
+   The TBSCertificate's subjectPublicKeyInfo contains the specified
+   public key.  Its algorithm field MUST match the
+   TBSCertificateLogEntry's subjectPublicKeyAlgorithm.  Its hash MUST
+   match the TBSCertificateLogEntry's subjectPublicKeyInfoHash.
+
+   The TBSCertificate's signature and the Certificate's
+   signatureAlgorithm MUST contain an AlgorithmIdentifier whose
+   algorithm is id-alg-mtcProof, defined below, and whose parameters is
+   omitted.
+
+   id-alg-mtcProof OBJECT IDENTIFIER ::= {
+       iso(1) identified-organization(3) dod(6) internet(1) security(5)
+       mechanisms(5) pkix(7) algorithms(6) 67 }
+
+   The signatureValue contains an MTCProof structure, defined below
+   using the TLS presentation language (Section 3 of [RFC9846]):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 40]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   /* From Section 4 of draft-ietf-tls-trust-anchor-ids */
+   opaque TrustAnchorID<1..2^8-1>;
+
+   struct {
+       TrustAnchorID cosigner_id;
+       opaque signature<0..2^16-1>;
+   } Cosignature;
+
+   struct {
+       MTCLogEntryExtension extensions<0..2^16-1>;
+       uint48 start;
+       uint48 end;
+       opaque inclusion_proof<0..2^16-1>;
+       Cosignature signatures<0..2^24-1>;
+   } MTCProof;
+
+   extensions MUST contain the log entry's extensions value
+   (Section 5.2.1).
+
+   start and end MUST contain the corresponding parameters of the chosen
+   subtree. inclusion_proof MUST contain a subtree inclusion proof
+   (Section 4.3) for the log entry and the subtree.  Each hash in the
+   proof is concatenated in order. signatures contains the chosen
+   subtree signatures.  In each signature, cosigner_id contains the
+   cosigner ID (Section 5.3) in its binary representation (Section 4 of
+   [I-D.ietf-tls-trust-anchor-ids]), and signature contains the
+   signature value as described in Section 5.3.1.  The timestamp field
+   used when computing the signature MUST be zero.
+
+   Each element of the signatures field MUST have a unique cosigner_id.
+   Elements MUST be ordered by cosigner_id (excluding length prefix) as
+   follows:
+
+   *  Shorter byte strings are ordered before longer byte strings
+
+   *  Byte strings of the same length are ordered lexicographically
+
+   An MTCProof parser MUST reject the input if there are duplicate
+   cosigner_id values, or if they are not ordered correctly.  This can
+   be done by checking each cosigner_id value comes strictly after the
+   previous one in the above order.
+
+   CAs, or other parties, MAY include GREASE [RFC8701] cosignatures in
+   an MTCProof by allocating an unused cosigner ID and inserting it into
+   the signatures field.  The cosigner_id is the unused cosigner ID and
+   the signature is an arbitrary byte string.  A cosigner ID allocated
+   for GREASE MUST NOT be later repurposed for a real cosigner.
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 41]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   The MTCProof is encoded into the signatureValue with no additional
+   ASN.1 wrapping.  The most significant bit of the first octet of the
+   signature value SHALL become the first bit of the bit string, and so
+   on through the least significant bit of the last octet of the
+   signature value, which SHALL become the last bit of the bit string
+
+6.3.  Standalone Certificates
+
+   A _standalone certificate_ is a Merkle Tree certificate which
+   contains sufficient signatures to allow a relying party to trust the
+   choice of subtree, without any predistributed information beyond the
+   cosigner(s) parameters.  Standalone certificates can be issued
+   without significant processing delay.
+
+   When issuing a certificate, the CA first adds the
+   TBSCertificateLogEntry to its issuance log.  It then schedules a job
+   to construct a checkpoint and collect cosignatures.  The job proceeds
+   as follows:
+
+   1.  The CA signs the checkpoint with its key(s) (Section 5.4).
+
+   2.  Using the procedure in Section 4.5, the CA determines the two
+       subtrees that cover the entries added between this checkpoint and
+       the most recent checkpoint.
+
+   3.  The CA signs each subtree with its key(s) (Section 5.3).
+
+   4.  The CA requests sufficient subtree cosignatures from external
+       cosigners to meet relying party requirements (Section 7.3).
+       Depending on the protocol for requesting subtree cosignatures
+       (e.g. [TLOG-WITNESS] and [TLOG-MIRROR]), this step may require
+       first requesting a checkpoint cosignature (Section 5.3) from each
+       cosigner.
+
+   5.  For each log entry in the interval, the CA constructs a
+       certificate (Section 6.2) from the inputs in Section 6.1, using
+       the covering subtree and the subtree cosignatures collected in
+       steps 3 and 4.
+
+   Step 4 is analogous to requesting SCTs from CT logs in Certificate
+   Transparency, except that a single run of this job collects
+   signatures for many certificates at once.  The CA MAY request
+   signatures from a redundant set of cosigners and select the ones that
+   complete first.
+
+   This document does not place any requirements on how frequently this
+   job runs.  More frequent runs result in lower issuance delay, but
+   higher signing overhead.  It is RECOMMENDED that CAs run at most one
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 42]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   instance of this job at a time, starting the next instance after the
+   previous one completes.  A single run collects signatures for all
+   entries since the most recent checkpoint, so there is little benefit
+   to overlapping them.  Less frequent runs may also aid relying parties
+   that wish to directly audit signatures, as described in Section 5.2
+   of [AuditingRevisited], though this document does not define such a
+   system.
+
+   This document does not prescribe the specific cosigner roles, or a
+   particular protocol for requesting cosignatures.  Protocols for
+   cosigners can vary depending on the needs of that cosigner.  Some
+   example protocols are described in [TLOG-WITNESS] and [TLOG-MIRROR].
+   It is RECOMMENDED that the CA collect cosignatures for the
+   authenticating party, but the authenticating party MAY collect
+   additional cosignatures and add them to the certificate.
+
+6.4.  Landmark-Relative Certificates
+
+   A _landmark-relative certificate_ is a Merkle Tree certificate which
+   authenticates its subtree by assuming the relying party had
+   predistributed information about which subtrees were trusted.  This
+   allows the certificate to omit subtree cosignatures.
+
+   Landmark-relative certificates are an optional size optimization.
+   They require a processing delay to construct, and only work in a
+   sufficiently up-to-date relying party.  Authenticating parties thus
+   SHOULD deploy a corresponding standalone certificate alongside any
+   landmark-relative certificate, and use some application-protocol-
+   specific mechanism to select between the two.  Section 8 discusses
+   such a mechanism for TLS [RFC9846].
+
+6.4.1.  Landmark Tree Sizes
+
+   A CA that issues landmark-relative certificates MUST additionally
+   maintain a _landmark sequence_. A landmark sequence is a sequence of
+   _landmarks_, defined below.  Landmarks are used as a common point of
+   reference across the ecosystem for optimizing certificates.
+
+   Each landmark consists of:
+
+   *  A landmark number, used as an identifier for the landmark
+
+   *  A tree size, which is the size of the tree at the time the
+      landmark was allocated
+
+   *  An expiration time, represented as seconds since the Epoch
+      (Section 4.19 of Volume 1 of [POSIX])
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 43]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   The landmark sequence is append-only, with landmarks numbered
+   consecutively from zero.  Landmark zero MUST have a tree size of zero
+   and an expiration of zero seconds since the Epoch.  For each
+   subsequent landmark, the tree size MUST be greater than that of the
+   previous landmark, and the expiry MUST be greater or equal to that of
+   the previous landmark.
+
+   Each landmark has two _landmark subtrees_. The landmark subtrees for
+   landmark number L as determined follows:
+
+   1.  If L is zero, the landmark subtrees are [0, 0) and [0, 0).
+
+   2.  Otherwise, let tree_size be landmark L's tree size and
+       prev_tree_size be that of landmark L - 1.
+
+   3.  The landmark subtrees are the two subtrees that cover
+       [prev_tree_size, tree_size), as described in Section 4.5.
+
+   A landmark's expiration time MUST be greater or equal to the notAfter
+   time of every TBSCertificateLogEntry whose index is less than the
+   tree size.  When allocating a landmark, CAs SHOULD set the expiration
+   time to the current time plus the CA's maximum certificate lifetime.
+
+   A landmark that is not yet expired is said to be _active_. Landmark
+   zero is never active.  At any time, a log's _active landmark
+   subtrees_ are the landmark subtrees of each currently active
+   landmark.  Active landmark subtrees are predistributed to the relying
+   party as trusted subtrees, as described in Section 7.4.
+
+   The above conditions imply that every unexpired entry in the log is
+   either contained in some landmark subtree or was allocated sometime
+   after the latest landmark.
+
+   As the issuance log grows, CAs continuously allocate new landmarks.
+   More frequent allocation reduces landmark-relative certificate delay,
+   while less frequent allocation reduces the size of the relying
+   party's predistributed state.  As described in Section 7.4, relying
+   parties maintain some upper bound on active landmarks per CA.  CAs
+   SHOULD allocate landmarks such that the number of active landmarks,
+   across all their logs, is within the bound for supported relying
+   parties.  Section 6.4.2 gives a RECOMMENDED procedure for allocating
+   landmarks.
+
+   Mistakes in landmark sequence allocation only impact availability,
+   not security.  That is, they will not cause the relying party to
+   accept certificates for entries the CA did not certify.  However,
+   they might cause a relying party to reject some of the CA's otherwise
+   valid landmark-relative certificates.
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 44]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+6.4.2.  Allocating Landmarks
+
+   It is RECOMMENDED that landmarks be allocated using the following
+   procedure:
+
+   1.  Let max_cert_lifetime by some upper bound on the CA's certificate
+       lifetime.
+
+   2.  Select some time_between_landmarks duration.
+
+   3.  Define a series of consecutive, non-overlapping time intervals,
+       each of duration time_between_landmarks.
+
+   4.  At most once per time interval, run the following:
+
+       1.  If the current log's tree size is equal to the its landmark's
+           tree size, do nothing.
+
+       2.  Otherwise, append a landmark to the current log whose tree
+           size is the current tree size and whose expiry is the current
+           time plus max_cert_lifetime.
+
+   This procedure ensures there are at most ceil(max_cert_lifetime /
+   time_between_landmarks) + 1 active landmarks across all of the CA's
+   logs.  For example, if max_cert_lifetime is 7 days and
+   time_between_landmarks is one hour, there will be at most 169 active
+   landmarks, or 338 active landmark subtrees.  The relying party state
+   is then 10,816 bytes with SHA-256.
+
+6.4.3.  Publishing Landmarks
+
+   The following format can be used to represent a CA's active
+   landmarks.  The format MUST contain the following sequence of lines.
+   Each line MUST be terminated by a newline character (U+000A):
+
+   *  A header line consisting of a decimal integer, latest_landmark,
+      with the landmark number of the CA's most recent landmark at the
+      time of publishing.  This value MUST be at most 2^48-1.
+
+   *  A sequence of num_active_landmarks + 1 lines, where
+      num_active_landmarks is the number of active landmarks at the time
+      of publishing.  Decoders MUST reject documents where there are
+      greater than latest_landmark + 1 such lines.  Numbered
+      consecutively from zero, line i in this sequence consists of:
+
+      -  The tree size for landmark latest_landmark - i as a decimal
+         integer.  This value MUST be at most 2^48-1.
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 45]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+      -  A single space character (U+0020).
+
+      -  The expiration time for landmark latest_landmark - i as a
+         decimal integer containing seconds since the Epoch
+         (Section 4.19 of Volume 1 of [POSIX]).
+
+   Tree sizes MUST be strictly monotonically decreasing, and expiration
+   times MUST be monotonically decreasing.  There MUST be at least one
+   expiration time before the current time.
+
+   Decoders MUST reject documents that do not strictly conform to the
+   above requirements, including extraneous whitespace and the lack of
+   an expired landmark.  A decoder MAY process only a prefix of this
+   document, provided there is at least one expired landmark to denote
+   the end of the active landmarks.
+
+6.4.4.  Constructing Landmark-Relative Certificates
+
+   Given the inputs in Section 6.1 and the corresponding log's landmark
+   sequence, a landmark-relative certificate is constructed as follows:
+
+   1.  Let idx be the entry index.
+
+   2.  Let L be the lowest numbered landmark whose tree size is strictly
+       greater than idx.  If no such landmark has been allocated yet,
+       wait for one to be allocated.  If the entry has already expired
+       and historical landmark information is unavailable, abort the
+       procedure.
+
+   3.  Determine the L's subtrees (Section 6.4.1) and select the unique
+       one whose [start, end) interval contains idx.
+
+   4.  Construct a certificate (Section 6.2) using the selected subtree.
+       No cosignatures are required to authenticate the subtree, though
+       the certificate MAY include cosignatures for other purposes, such
+       as GREASE [RFC8701] cosignatures as described in Section 6.2.
+
+   The procedure above is not specific to the CA.  Any party holding a
+   standalone certificate (Section 6.3) can construct the corresponding
+   landmark-relative certificate by recovering the certificate inputs
+   from it and obtaining the landmark sequence and inclusion proof
+   hashes from the issuance log.
+
+
+
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 46]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+6.5.  Size Estimates
+
+   The inclusion proofs in standalone and landmark-relative certificates
+   scale logarithmically with the size of the subtree.  These sizes can
+   be estimated with the CA's issuance rate.  The byte counts below
+   assume the issuance log's hash function is SHA-256.
+
+   Some organizations have published statistics which can be used to
+   estimate this rate for the Web PKI.  As of September 18th, 2026:
+
+   *  [LetsEncrypt] reported around 682,000,000 active certificates for
+      a single CA
+
+   *  [CloudflareRadar] reported around 2,900,000,000 unexpired
+      certificates in CT logs, across all CAs
+
+   *  [CloudflareRadar] reported an issuance rate of around 591,000
+      certificates per hour, across all CAs
+
+   The current issuance rate across the Web PKI may not necessarily be
+   representative of the Web PKI after a transition to short-lived
+   certificates.  Assuming a certificate lifetime of 7 days, and that
+   subscribers will update their certificates 75% of the way through
+   their lifetime (see Section 10.4), every certificate will be reissued
+   every 126 hours.  This gives issuance rate estimates of around
+   5,400,000 certificates per hour and 23,000,000 certificates per hour,
+   for the first two values above.  Note the larger estimate is across
+   all CAs, while subtrees would only span one CA.
+
+   Using the per-CA short lifetime estimate, if the CA mints a
+   checkpoint every 2 seconds, standalone certificate subtrees will span
+   around 3,000 certificates, leading to 12 hashes in the inclusion
+   proof, or 384 bytes.  Standalone certificates additionally must carry
+   a sufficient set of signatures to meet relying party requirements.
+
+   If a new landmark is allocated every hour, landmark-relative
+   certificate subtrees will span around 5,400,000 certificates, leading
+   to 23 hashes in the inclusion proof, giving an inclusion proof size
+   of 736 bytes, with no signatures.  This is significantly smaller than
+   a single ML-DSA-44 signature, 2,420 bytes, and almost ten times
+   smaller than the three ML-DSA-44 signatures necessary to include
+   post-quantum SCTs.
+
+   Proof sizes grow logarithmically, so 32 hashes, or 1024 bytes, is
+   sufficient for subtrees of up to 2^32 (4,294,967,296) certificates.
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 47]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+

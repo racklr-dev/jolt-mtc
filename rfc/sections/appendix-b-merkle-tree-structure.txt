@@ -1,0 +1,507 @@
+Appendix B.  Merkle Tree Structure
+
+   This non-normative section describes how the Merkle Tree structure
+   relates to the binary representations of indices.  It is included to
+   help implementers understand the procedures described in Section 4.
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 84]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+B.1.  Binary Representations
+
+   Within a Merkle Tree whose size is a power of two, the binary
+   representation of a leaf's index gives the path to that leaf.  The
+   leaf is a left child if the least-significant bit is unset and a
+   right child if it is set.  The next bit indicates the direction of
+   the parent node, and so on.  Figure 11 demonstrates this in a Merkle
+   Tree of size 8:
+
+          +----------------+
+          |     [0, 8)     |        level 3
+          +----------------+
+           /              \
+      +--------+      +--------+
+      | [0, 4) |      | [4, 8) |    level 2
+      +--------+      +--------+
+       /      \        /      \
+   +-----+ +-----+ +-----+ +-----+
+   |[0,2)| |[2,4)| |[4,6)| |[6,8)|  level 1
+   +-----+ +-----+ +-----+ +-----+
+     / \     / \     / \     / \
+   +-+ +-+ +-+ +-+ +-+ +-+ +-+ +-+
+   |0| |1| |2| |3| |4| |5| |6| |7|  level 0
+   +-+ +-+ +-+ +-+ +-+ +-+ +-+ +-+
+
+                Figure 11: An example Merkle Tree of size 8
+
+   The binary representation of 4 is 0b100.  It is the left (0) child of
+   [4, 6), which is the left (0) child of [4, 8), which is the right (1)
+   child of [0, 8).
+
+   Each level in the tree corresponds to a bit position and can be
+   correspondingly numbered, with 0 indicating the least-significant bit
+   and the leaf level, and so on.  In this numbering, a node's level can
+   be determined as follows: if the node is a root of subtree [start,
+   end), the node's level is BIT_WIDTH(end - start - 1).
+
+   Comparing two indices determines the relationship between two paths.
+   The highest differing bit gives the level at which paths from root to
+   leaf diverge.  For example, the bit representations of 4 and 6 are
+   0b100 and 0b110, respectively.  The highest differing bit is bit 1.
+   Bits 2 and up are the same between the two indices.  This indicates
+   that the paths from the root to leaves 4 and 6 diverge when going
+   from level 2 to level 1.
+
+   This can be generalized to arbitrary-sized Merkle Trees.  Figure 12
+   depicts a Merkle Tree of size 6:
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 85]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+          +--------------+
+          |     [0, 6)   |   level 3
+          +--------------+
+           /          |
+      +--------+      |
+      | [0, 4) |      *      level 2
+      +--------+      |
+       /      \       |
+   +-----+ +-----+ +-----+
+   |[0,2)| |[2,4)| |[4,6)|   level 1
+   +-----+ +-----+ +-----+
+     / \     / \     / \
+   +-+ +-+ +-+ +-+ +-+ +-+
+   |0| |1| |2| |3| |4| |5|   level 0
+   +-+ +-+ +-+ +-+ +-+ +-+
+
+                Figure 12: An example Merkle Tree of size 6
+
+   When the size of a Merkle Tree is not a power of two, some levels on
+   the rightmost edge of the tree are skipped.  The rightmost edge is
+   the path to the last element.  The skipped levels can be seen in its
+   binary representation.  Here, the last element is 5, which has binary
+   representation 0b101.  When a bit is set, the corresponding node is a
+   right child.  When it is unset, the corresponding node is skipped.
+
+   In a tree of the next power of two size, the skipped nodes in this
+   path are where there _would_ have been a right child, had there been
+   enough elements to construct one.  Without a right child, the hash
+   operation is skipped and a skipped node has the same value as its
+   singular child.  Figure 13 depicts this for a tree of size 6.
+
+          +----------------+
+          |     [0, 6)     |        level 3
+          +----------------+
+           /              \
+      +--------+      +--------+
+      | [0, 4) |      | [4, 6) |    level 2
+      +--------+      +--------+
+       /      \        /      \
+   +-----+ +-----+ +-----+ +-----+
+   |[0,2)| |[2,4)| |[4,6)| |     |  level 1
+   +-----+ +-----+ +-----+ +-----+
+     / \     / \     / \     / \
+   +-+ +-+ +-+ +-+ +-+ +-+ +-+ +-+
+   |0| |1| |2| |3| |4| |5| | | | |  level 0
+   +-+ +-+ +-+ +-+ +-+ +-+ +-+ +-+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 86]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+      Figure 13: An example Merkle Tree of size 6, viewed as a subset
+                            of a tree of size 8
+
+   Zero bits also indicate skipped nodes in paths that have not yet
+   diverged from the rightmost edge (i.e. the path to the last element),
+   when viewed from root to leaf.  In the example, the binary
+   representation of 4 is 0b100.  While bit 0 and bit 1 are both unset,
+   they manifest in the tree differently.  Bit 0 indicates that 4 is a
+   left child.  However, at bit 1, 0b100 has not yet diverged from the
+   last element, 0b101.  That instead indicates a skipped node, not a
+   left child.
+
+B.2.  Subtrees
+
+   Given a list of elements and Merkle Tree over them, it is possible to
+   construct a smaller Merkle Tree over any interval of elements.
+   However, those smaller trees may not have the same structure as the
+   original tree.
+
+   Figure 14 shows a Merkle Tree of size 8, and a tree built over
+   elements [1, 5).  When [1, 5) is considered as an independent,
+   4-element sequence, it does not align with the portion of the overall
+   tree that covers [1, 5).  The two trees do not share any intermediate
+   nodes.  This prevents constructing subtree consistency proofs
+   (Section 4.4).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 87]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+          +----------------+
+          |     [0, 8)     |        level 3
+          +----------------+
+           /              \
+      +--------+      +--------+
+      | [0, 4) |      | [4, 8) |    level 2
+      +--------+      +--------+
+       /      \        /      \
+   +-----+ +-----+ +-----+ +-----+
+   |[0,2)| |[2,4)| |[4,6)| |[6,8)|  level 1
+   +-----+ +-----+ +-----+ +-----+
+     / \     / \     / \     / \
+   +-+ +-+ +-+ +-+ +-+ +-+ +-+ +-+
+   |0| |1| |2| |3| |4| |5| |6| |7|  level 0
+   +-+ +-+ +-+ +-+ +-+ +-+ +-+ +-+
+
+
+          +--------+
+          | [1, 5) |                level 2
+          +--------+
+           /      \
+       +-----+ +-----+
+       |[1,3)| |[3,5)|              level 1
+       +-----+ +-----+
+         / \     / \
+       +-+ +-+ +-+ +-+
+       |1| |2| |3| |4|              level 0
+       +-+ +-+ +-+ +-+
+
+                   Figure 14: An example misaligned tree
+
+   The numerical constraints on start and end in Section 4.1 restrict
+   subtrees to ensure that they are properly aligned with the original
+   tree as to permit subtree consistency proofs.  A Merkle Tree built
+   over [start, end) has size end - start, and is constructed as if
+   start were the first element of the sequence at index zero.  To be
+   aligned, start must be the leftmost leaf of the lowest common
+   ancestor of start and end - 1 in the original tree:
+
+   *  Numerically, this means the least significant BIT_WIDTH(end -
+      start - 1) bits of start must be zero.  Equivalently, start must
+      be divisible by BIT_CEIL(end - start).
+
+   *  In the tree, this means subtrees are constructed by taking any
+      node in the tree, setting start to the leftmost leaf under the
+      node, and end to one past any other leaf under the node.
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 88]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   Though most nodes overlap, not every node of the subtree is
+   necessarily in the larger Merkle Tree, as shown in Figure 5.  In
+   general:
+
+   *  Subtrees whose sizes are a power of two are called _full
+      subtrees_. A full subtree's root node will always be in the
+      original tree.
+
+   *  Subtrees whose sizes are not a power of two are called _partial
+      subtrees_. A partial subtree's root node will be in the original
+      tree of size n, if and only if n = end.  Otherwise, non-leaf nodes
+      along the partial subtree's right edge will not be part of the
+      original tree.
+
+   The difference between full and partial subtrees does not impact
+   their usage, but they can help in understanding the proof
+   constructions below.
+
+B.3.  Inclusion Proof Evaluation
+
+   The procedure in Section 4.3.2 builds up a subtree hash in r by
+   starting from entry_hash and iteratively hashing elements of
+   inclusion_proof on the left or right.  That means this procedure,
+   when successful, must return _some_ hash that contains entry_hash.
+
+   Treating [start, end) as a Merkle Tree of size end - start, the
+   procedure hashes based on the path to index.  Within this smaller
+   Merkle Tree, it has index fn = index - start (first number), and the
+   last element has index sn = end - start - 1 (second number).
+
+   Step 4 iterates through inclusion_proof and the paths to fn and sn in
+   parallel.  As the procedure right-shifts fn and sn and looks at the
+   least-significant bit, it moves up the two paths, toward the root.
+   When sn is zero, the procedure has reached the top of the tree.  The
+   procedure checks that the two iterations complete together.
+
+   Iterating from level 0 up, fn and sn will initially be different.
+   While they are different, step 4.2 hashes on the left or right based
+   on the binary representation, as discussed in Appendix B.1.
+
+   Once fn = sn, the remainder of the path is on the right edge.  At
+   that point, the condition in step 4.2 is always true.  It only
+   incorporates proof entries on the left, once per set bit.  Unset bits
+   are skipped.
+
+   Inclusion proofs can also be evaluated by considering these two
+   stages separately.  The first stage consumes l1 = BIT_WIDTH(fn XOR
+   sn) proof entries.  The second stage consumes l2 = POPCOUNT(fn >> l1)
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 89]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   proof entries.  A valid inclusion proof must then have l1 + l2
+   entries.  The first l1 entries are hashed based on fn's least
+   significant bits, and the remaining l2 entries are hashed on the
+   left.
+
+B.4.  Consistency Proof Structure
+
+   A subtree consistency proof for [start, end) and the tree of n
+   elements is similar to an inclusion proof for element end - 1.  If
+   one starts from end - 1's hash, incorporating the whole inclusion
+   proof should reconstruct root_hash and incorporating a subset of the
+   inclusion proof should reconstruct node_hash.  Thus end - 1's hash
+   and this inclusion proof can prove consistency.  A subtree
+   consistency proof in this document applies two optimizations over
+   this construction:
+
+   1.  Instead of starting at level 0 with end - 1, the proof can start
+       at a higher level.  Any ancestor of end - 1 shared by both the
+       subtree and the overall tree is a valid starting node to
+       reconstruct node_hash and root_hash.  Use the highest level with
+       a common ancestor.  This truncates the inclusion proof.
+
+   2.  If this starting node is the entire subtree, omit its hash from
+       the consistency proof.  The verifier is assumed to already know
+       node_hash.
+
+   A Merkle consistency proof, defined in Section 2.1.4 of [RFC9162],
+   applies these same optimizations.
+
+   Figure 15 depicts a subtree consistency proof between the subtree [0,
+   6) and the Merkle Tree of size 8.  The consistency proof begins at
+   level 1, or node [4, 6).  The inclusion proof portion is similarly
+   truncated to start at level 1: [6, 8) and [0, 4).  If the consistency
+   proof began at level 0, the starting node would be leaf 5, and the
+   consistency proof would additionally include leaf 4.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 90]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+          +----------------+
+          |     [0, 6)     |         level 3
+          +----------------+
+           /           |
+      +========+  +--------+
+      | [0, 4) |  | [4, 6) |         level 2
+      +========+  +--------+
+       /      \        |
+   +-----+ +-----+ +~~~~~+
+   |[0,2)| |[2,4)| |[4,6)|           level 1
+   +-----+ +-----+ +~~~~~+
+     / \     / \     / \
+   +-+ +-+ +-+ +-+ +-+ +-+
+   |0| |1| |2| |3| |4| |5|           level 0
+   +-+ +-+ +-+ +-+ +-+ +-+
+
+
+          +----------------+
+          |     [0, 8)     |         level 3
+          +----------------+
+           /              \
+      +========+      +--------+
+      | [0, 4) |      | [4, 8) |     level 2
+      +========+      +--------+
+       /      \        /      \
+   +-----+ +-----+ +~~~~~+ +=====+
+   |[0,2)| |[2,4)| |[4,6)| |[6,8)|   level 1
+   +-----+ +-----+ +~~~~~+ +=====+
+     / \     / \     / \     / \
+   +-+ +-+ +-+ +-+ +-+ +-+ +-+ +-+
+   |0| |1| |2| |3| |4| |5| |6| |7|   level 0
+   +-+ +-+ +-+ +-+ +-+ +-+ +-+ +-+
+
+       Figure 15: A subtree consistency proof that starts at level 1
+                             instead of level 0
+
+   Note that the truncated inclusion proof may include nodes from lower
+   levels, if the corresponding level was skipped on the right edge.
+   Figure 16 depicts a subtree consistency proof between the subtree [0,
+   6) and the Merkle Tree of size 7.  As above, the starting node is [4,
+   6) at level 1.  The inclusion proof portion includes leaf 6 at level
+   0.  This is because leaf 6 is taking the place of its skipped parent
+   at level 1.  (A skipped node can be thought of as a duplicate of its
+   singular child.)
+
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 91]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+          +----------------+
+          |     [0, 6)     |       level 3
+          +----------------+
+           /           |
+      +========+  +--------+
+      | [0, 4) |  | [4, 6) |       level 2
+      +========+  +--------+
+       /      \        |
+   +-----+ +-----+ +~~~~~+
+   |[0,2)| |[2,4)| |[4,6)|         level 1
+   +-----+ +-----+ +~~~~~+
+     / \     / \     / \
+   +-+ +-+ +-+ +-+ +-+ +-+
+   |0| |1| |2| |3| |4| |5|         level 0
+   +-+ +-+ +-+ +-+ +-+ +-+
+
+
+          +----------------+
+          |     [0, 7)     |       level 3
+          +----------------+
+           /              \
+      +========+      +--------+
+      | [0, 4) |      | [4, 7) |   level 2
+      +========+      +--------+
+       /      \        /    |
+   +-----+ +-----+ +~~~~~+ +=+
+   |[0,2)| |[2,4)| |[4,6)| |6|     level 1
+   +-----+ +-----+ +~~~~~+ +=+
+     / \     / \     / \    |
+   +-+ +-+ +-+ +-+ +-+ +-+ +-+
+   |0| |1| |2| |3| |4| |5| |6|     level 0
+   +-+ +-+ +-+ +-+ +-+ +-+ +-+
+
+     Figure 16: The interaction between inclusion proof truncation and
+                               skipped levels
+
+B.5.  Consistency Proof Verification
+
+   The procedure in Section 4.4.3 is structured similarly to inclusion
+   proof evaluation (Appendix B.3).  It iteratively builds two hashes,
+   fr (first root) and sr (second root), which are expected to equal
+   node_hash and root_hash, respectively.  Everything hashed into fr is
+   also hashed into sr, so success demonstrates that root_hash contains
+   node_hash.
+
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 92]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   Step 2 initializes fn (first number), sn (second number), and tn
+   (third number) to follow, respectively, the paths to start, end - 1
+   (the last element of the subtree), and n - 1 (the last element of the
+   tree).
+
+   Steps 3 and 4 then skip to the starting node, described in
+   Appendix B.4.  The starting node may be:
+
+   *  The entire subtree [start, end) if the subtree root is in the
+      tree.  This will occur if end is n (step 3), or if [start, end) is
+      a full subtree (exiting step 4 because fn is sn).
+
+   *  Otherwise, the highest full subtree along the right edge of
+      [start, end).  This corresponds to the process exiting step 4
+      because LSB(sn) is not set.
+
+   Steps 5 and 6 initialize the hashes fr and sr:
+
+   *  In the first case above, fn will equal sn after truncation.  Step
+      5 will then initialize the hashes to node_hash because the
+      consistency proof does not need to include the starting node.
+
+   *  In the second case above, fn is less than sn.  Step 6 will then
+      initialize the hashes to the first value in the consistency proof.
+
+   Step 7 incorporates the remainder of the consistency proof into fr
+   and sr:
+
+   *  All hashes are incorporated into sr, with hashing on the left or
+      right determined the same as in inclusion proof evaluation.
+
+   *  A subset of the hashes is incorporated into fr.  It skips any hash
+      on the right because those contain elements greater than end - 1.
+      It also stops incorporating when fn and sn have converged.
+
+   This reconstructs the hashes of the subtree and original tree, which
+   are then compared to expected values in step 8.
+
+   In the case when fn is sn in step 5, the condition in step 7.2.1 is
+   always false, and fr is always equal to node_hash in step 8.  In this
+   case, steps 6 through 8 are equivalent to verifying an inclusion
+   proof for the truncated subtree [fn, sn + 1) and truncated tree tn +
+   1.
+

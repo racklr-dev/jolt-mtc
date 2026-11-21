@@ -1,0 +1,212 @@
+3.  Overview
+
+   In Certificate Transparency, a CA first certifies information by
+   signing it, then submits the resulting certificate (or
+   precertificate) to logs for logging.  Merkle Tree Certificates invert
+   this process: the CA certifies information by logging it, then
+   submits the log to cosigners to verify log operation.  A certificate
+   is assembled from the result and proves the information is in the
+   CA's log.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                   [Page 9]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   +-- Certification Authority ---+    +--  Authenticating Party ----+
+   |                              |    |                             |
+   |  2. Validate request     <---+----+--  1. Request certificate   |
+   |       |                      |    |       issuance              |
+   |       |                      |    |                             |
+   |       V                      |    |                             |
+   |                              |    |                             |
+   |  3. Add to issuance log      |    |                             |
+   |       +---[ CA cosign ]      |    |                             |
+   |      / \                 ----+----+->  5. Download certificates |
+   |     /   \                    |    |                             |
+   |    /     \                   |    |          *  tbscert         |
+   |   +-------+                  |    |      = = =  inclusion proof |
+   |    * * * *  tbscert entries  |    |     [ CA ]  cosignatures    |
+   |                              |    | [ mirror ]                  |
+   +------------------------------+    +-----------------------------+
+              /   |   \
+             /    |    \    4. Submit log to cosigners
+            V     V     V      for cosignatures
+
+   +-- Mirrors, other cosigners --+    +-- Monitors -----------------+
+   |                              |    |                             |
+   |       +---[ CA cosign ]      +-+  |                             |
+   |      / \  [ mirror cosign ]  | |  |                             |
+   |     /   \                    | |  |                             |
+   |    /     \                 <-+-+--+--  6. Monitor CA operation  |
+   |   +-------+                  | |  |                             |
+   |    * * * *                   | |  +-----------------------------+
+   +-+----------------------------+ |
+     |  ...quorum of cosigners...   |
+     +------------------------------+
+
+    Figure 1: A diagram of the MTC issuance architecture, detailed below
+
+   Merkle Tree Certificates are issued as follows.  Figure 1 depicts
+   this process.
+
+   1.  The authenticating party requests a certificate, e.g. over ACME
+       [RFC8555]
+
+   2.  The CA validates each incoming issuance request, e.g. with ACME
+       challenges.  From there, the process diverges from CT-based PKIs.
+
+   3.  The CA operates a series of append-only _issuance logs_
+       (Section 5.2).  Unlike a CT log, these logs only contain entries
+       added by the CA:
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 10]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+       a.  The CA adds a TBSCertificateLogEntry (Section 5.2.1,
+           abbreviated "tbscert entries" in the diagram) to an issuance
+           log, describing the information it is certifying.
+
+       b.  The CA signs a _checkpoint_, which describes the current
+           state of the log.  A signed checkpoint certifies that the CA
+           issued _every_ entry in the Merkle Tree (Section 5.4).
+
+       c.  The CA additionally signs _subtrees_ (Section 4) that
+           together contain certificates added since the last checkpoint
+           (Section 4.5).  This is an optimization to reduce inclusion
+           proof sizes.  A signed subtree certifies that the CA has
+           issued _every_ entry in the subtree.
+
+   4.  The CA submits the new log state to _cosigners_. Cosigners
+       validate the log is append-only and optionally provide additional
+       services, such as mirroring its contents.  They cosign the CA's
+       checkpoints and subtrees.
+
+   5.  The CA now has enough information to construct a certificate and
+       give it to the authenticating party.  A certificate contains:
+
+       *  The TBSCertificate being certified
+
+       *  An inclusion proof from the TBSCertificate to some subtree
+
+       *  Cosignatures from the CA and cosigners on the subtree
+
+   6.  As in Certificate Transparency, monitors observe the CA's
+       issuance logs to ensure the CA is operated correctly.
+
+   A certificate with cosignatures is known as a _standalone
+   certificate_. Analogous to X.509 trust anchors and trusted CT logs,
+   relying parties are configured with trusted cosigners (Section 7.3)
+   that allow them to accept Merkle Tree certificates.  The inclusion
+   proof proves the TBSCertificate is part of some subtree, and
+   cosignatures from trusted cosigners prove the subtree was certified
+   by the CA and available to monitors.  Where CT logs entire
+   certificates, the issuance log's entries are smaller
+   TBSCertificateLogEntry (Section 5.2.1) structures, which do not scale
+   with public key or signature size.
+
+   This same issuance process also produces a _landmark-relative
+   certificate_. This is an optional, optimized certificate that does
+   not need subtree cosignatures, including any from the CA.  Landmark-
+   relative certificates are available after a short period of time and
+   usable with up-to-date relying parties.
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 11]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   +-- Certification Authority -----+
+   |                                |  +-- Update Channel --+
+   |    /\                          |  |                    |
+   |   /  \  1. Allocate landmarks -+--+----------------+   |
+   |  +----+                  |     |  |                |   |
+   +--------------------------+-----+  +----------------+---+
+                              |                         |
+    2. Make landmark-relative |           3. Distribute |
+       cert                   |              landmarks  |
+                              V                         |
+   +-- Authenticating Party --------+                   |
+   |                                |                   |
+   | landmark-relative cert         |                   V
+   |   tbscert                      |  +-- Up-to-date RP -----+
+   |   inclusion proof to landmark -+->| landmark hashes      |
+   |                                |  | trusted cosigners    |
+   |                                |  +----------------------+
+   | standalone cert                |
+   |   tbscert                      |  +-- Unupdated RP ------+
+   |   inclusion proof              |  | (stale or no hashes) |
+   |   cosignatures     ------------+->| trusted cosigners    |
+   |                                |  +----------------------+
+   +--------------------------------+
+                        4. Select certificate by RP
+
+     Figure 2: A diagram of landmark-relative certificate construction
+                         and usage, detailed below
+
+   Landmark-relative certificates are constructed and used as follows.
+   Figure 2 depicts this process.
+
+   1.  Periodically, the tree size of the CA's most recent checkpoint is
+       designated as a _landmark_. This determines _landmark subtrees_,
+       which are common points of reference between relying parties and
+       landmark-relative certificates.
+
+   2.  Once some landmark includes the TBSCertificate, the landmark-
+       relative certificate is constructed with:
+
+       *  The TBSCertificate being certified
+
+       *  An inclusion proof from the TBSCertificate to a landmark
+          subtree
+
+   3.  In the background, landmark subtrees are predistributed to
+       relying parties, with cosignatures checked against relying party
+       requirements.  This occurs periodically in the background,
+       separate from the application protocol.
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 12]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   4.  During the application protocol, such as TLS [RFC9846], if the
+       relying party already supports the landmark subtree, the
+       authenticating party can present the landmark-relative
+       certificate.  Otherwise, it presents a standalone certificate.
+       The authenticating party may also select between several
+       landmark-relative certificates, as described in Section 10.4.
+

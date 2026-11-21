@@ -1,0 +1,262 @@
+8.  Use in TLS
+
+   Most X.509 fields such as subjectPublicKeyInfo and X.509 extensions
+   such as subjectAltName are unmodified in Merkle Tree certificates.
+   They apply to TLS-based applications as in any X.509 certificate.
+   The primary new considerations for use in TLS are:
+
+   *  Whether the authenticating party should send a certificate from
+      one Merkle Tree CA, another Merkle Tree CA, or a directly-signing
+      X.509 CA
+
+   *  Whether the authenticating party should send a standalone or
+      landmark-relative certificate
+
+   *  What the relying party should communicate to the authenticating
+      party to help it make this decision
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 55]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   Certificate selection in TLS, described in Section 4.5.1.2 of
+   [RFC9846], incorporates both explicit relying-party-provided
+   information in the ClientHello and CertificateRequest messages and
+   implicit deployment-specific assumptions.  This section describes a
+   RECOMMENDED integration of Merkle Tree certificates into TLS trust
+   anchor IDs ([I-D.ietf-tls-trust-anchor-ids]), but applications MAY
+   use application-specific criteria in addition to, or instead of, this
+   recommendation.
+
+   Relying parties SHOULD NOT include Merkle Tree CAs in the
+   certificate_authorities extension (Section 4.3.4 of [RFC9846]).
+   Doing so might inadvertently signal an unsupported landmark-relative
+   certificate because they have the same issuer field as standalone
+   certificates.
+
+8.1.  Standalone Certificates
+
+   Authenticating and relying parties SHOULD use the trust_anchors
+   extension to determine whether a standalone certificate would be
+   acceptable.  A standalone certificate has a trust anchor ID of the
+   corresponding CA ID (Section 5.1).  This trust anchor ID is
+   additionally contained in the trust anchor groups defined in
+   Section 8.2.1.
+
+   CA IDs MAY be incorporated into other trust anchor groups, following
+   the guidance in Section 6 of [I-D.ietf-tls-trust-anchor-ids].
+
+   A standalone certificate MAY also be sent without explicit relying
+   party trust signals, however doing so means the authenticating party
+   implicitly assumes the relying party trusts the issuing CA.  This may
+   be viable if, for example, the CA is relatively ubiquitous among
+   supported relying parties.
+
+8.2.  Landmark-Relative Certificates
+
+   An authenticating party SHOULD NOT send a landmark-relative
+   certificate without a signal that the relying party trusts the
+   corresponding landmark subtree.  Even if the relying party is assumed
+   to trust the issuing CA, the relying party may not have sufficiently
+   up-to-date trusted subtrees.  This can be represented with the
+   trust_anchor_negotiation property in a CertificatePropertyList (see
+   Section 7.3 of [I-D.ietf-tls-trust-anchor-ids]), or other local
+   configuration.
+
+   TLS implementations SHOULD use the trust_anchors extension to
+   determine this.  A landmark-relative certificate issued by a CA with
+   ID caID, log number N, and constructed from landmark L has a trust
+   anchor ID of {caID landmarks(1) N L}.
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 56]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   For example, the trust anchor ID for landmark 42 of CA 32473.100 and
+   log number 8 is 32473.100.1.8.42.
+
+   These trust anchor IDs are used when it is necessary to identify an
+   individual landmark, e.g. as in the recovery mechanism described in
+   Section 5.6 of [I-D.ietf-tls-trust-anchor-ids].  To more efficiently
+   express a relying party's complete landmark state, these IDs are
+   contained in trust anchor groups defined in Section 8.2.1, which
+   allow relying parties to express their landmark state with a single
+   ID.
+
+   If both a landmark-relative and a standalone certificate are usable,
+   an authenticating party SHOULD preferentially use the landmark-
+   relative certificate.  A landmark-relative certificate asserts the
+   same information as its standalone counterpart, but is expected to be
+   smaller.
+
+8.2.1.  Single-Log Landmark Groups
+
+   Relying parties support many landmarks per log at a time.  To
+   compactly represent this, each log ID implicitly defines a series of
+   trust anchor groups (Section 6 of [I-D.ietf-tls-trust-anchor-ids])
+   called _landmark groups_.
+
+   For each Merkle Tree Certificates CA with ID caID, each log number N,
+   and each landmark number L, the ID {caID landmarkGroups(2) N L}
+   defines a landmark group.  It contains the following trust anchor
+   IDs:
+
+   *  caID itself (see Section 8.1).  This selects all standalone
+      certificates.
+
+   *  {caID landmarks(1) N M} for all M from 0 to L, inclusive.  This
+      selects landmark-relative certificates from active landmarks up to
+      L.
+
+   To support these groups in the authenticating party, CAs SHOULD
+   configure certificates to match the following trust anchor groups
+   (Sections 5.3 and 7.2 of [I-D.ietf-tls-trust-anchor-ids]):
+
+   *  A standalone certificate SHOULD include a trust anchor ID pattern
+      of caID.2.{0-}.{0-}.
+
+   *  A landmark-relative log number N and landmark L SHOULD include a
+      trust anchor ID pattern of caID.2.N.{L-}.
+
+   For example, suppose a CA with ID 32473.100 issues a certificate in
+   landmark 42 of log 8:
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 57]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   *  The standalone certificate has a trust anchor ID of 32473.100 and
+      is contained in groups 32473.100.2.{0-}.{0-}.
+
+   *  The landmark-relative certificate has a trust anchor ID of
+      32473.100.1.8.42 and is contained in groups 32473.100.2.8.{42-}.
+
+   A relying party whose latest trusted subtree (Section 7.4) in log N
+   is landmark L SHOULD configure the trust_anchors extension to
+   advertise the above landmark group.  This signals support for both
+   standalone certificates and supported landmarks.  For example, a
+   relying party which is up-to-date as of landmark 42 of log 8 of CA
+   32473.100 would send an ID of 32473.100.2.8.42.  This would signal
+   the following certificates:
+
+   *  Any standalone certificate from 32473.100, no matter the log or
+      landmark number.
+
+   *  Any landmark-relative certificate from 32473.100 from landmarks 23
+      through 42, inclusive, of log 8.
+
+   If this landmark information becomes too stale, such a relying party
+   SHOULD switch to advertising just the CA ID.  In the above example,
+   this would be 32473.100.
+
+8.2.2.  Timestamped Landmark Groups
+
+   Landmark groups for a single CA, described above, allow relying
+   parties to advertise one ID per supported CA.  Depending on the
+   number of trust anchors, this can be sufficient to efficiently
+   represent relying party state.  When needed, Section 6 of
+   [I-D.ietf-tls-trust-anchor-ids] describes how PKIs can use trust
+   anchor groups that span multiple CAs.  This section defines a
+   variation of the versioning construction described in Section 6.1 of
+   [I-D.ietf-tls-trust-anchor-ids], as applied to landmarks.
+
+   Trust anchor groups containing Merkle Tree CAs can represent
+   landmarks with an OID component based on a predictable clock.
+   Concretely, the family of groups is parameterized by:
+
+   *  A base OID arc base
+
+   *  A timestamp start_time
+
+   *  A time duration tick_duration
+
+   Given non-negative integers V and T, the group base.V contains
+   standalone certificates issued by some CA in version V of the group.
+   The group base.V.T contains:
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 58]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   *  Standalone certificates issued by some CA in version V of the
+      group.
+
+   *  Landmark-relative certificates issued one of the above CAs,
+      provided the landmark was active at time start_time + T *
+      tick_duration.
+
+   start_time SHOULD be set to sometime before the group is in use.
+   tick_duration SHOULD be set near the expected time between landmarks
+   in the group, e.g. one hour.  This predictable cadence allows the CA
+   to describe the trust anchor groups (Section 7.2 of
+   [I-D.ietf-tls-trust-anchor-ids]) for issued certificates without
+   additional coordination.  Concretely, if a CA was added in V_min, was
+   removed in V_max + 1, and issues a certificate whose landmark was
+   first active at time T_min and last active at time T_max:
+
+   *  The standalone certificate is contained in groups base.{V_min-
+      V_max} and base.{V_min-V_max}.{0-}.
+
+   *  The landmark-relative certificate is contained in groups
+      base.{V_min-V_max}.{T_min-T_max}
+
+   If the CA has not been removed in the latest version, V_max is
+   infinity, similar to the construction described in Section 6.1 of
+   [I-D.ietf-tls-trust-anchor-ids].  T_min and T_max are measured based
+   on start_time and tick_duration as described above.
+
+   A relying party sets V based on its current trust anchors and T based
+   on the age of its landmark information.  If its landmarks are too
+   stale, it sends base.V without any landmark timestamp.
+
+   In some cases, the relying party's landmark information may only be
+   partially up-to-date.  The relying party, or its update service, may
+   be unable to reach one CA in the group, e.g. due to a transient
+   outage.  This complicates timestamp-based strategies:
+
+   *  If the relying party uses an older timestamp, it will not signal
+      its up-to-date state for the reachable CAs.  This means a single
+      unreachable CA can disrupt service for certificates issued by
+      unrelated CAs.
+
+   *  If the relying party uses a newer timestamp, the relying party may
+      signal support for landmarks it does not have.  This risks
+      connection failures.  If the unreachable CA issued recent
+      landmark-relative certificates, those certificates will fail
+      validation.
+
+   The relying party can mitigate this in a number of ways:
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 59]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   *  If the trust anchor group consists of CAs from the same operator,
+      waiting until all CAs are reachable will be minimally disruptive.
+
+   *  The relying party can opt to send the group with an older
+      timestamp, combined with other, smaller groups at newer timestamps
+      to better describe its state.
+
+   *  A client relying party can send the newer timestamp and, in the
+      event the unreachable CA did issue recent landmark-relative
+      certificates, rely on the recovery mechanism described in
+      Section 5.6 of [I-D.ietf-tls-trust-anchor-ids] to recover from any
+      signaling failures.
+

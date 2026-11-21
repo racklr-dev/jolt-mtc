@@ -1,0 +1,89 @@
+Appendix A.  ASN.1 Module
+
+   This ASN.1 module uses the conventions established by [RFC5912].
+
+   MerkleTreeCertificates
+     { iso(1) identified-organization(3) dod(6) internet(1)
+       security(5) mechanisms(5) pkix(7) id-mod(0)
+       id-mod-mtc-2025(TBD) }
+
+   DEFINITIONS IMPLICIT TAGS ::=
+   BEGIN
+
+   IMPORTS
+     SIGNATURE-ALGORITHM, DIGEST-ALGORITHM, AlgorithmIdentifier{},
+     FROM AlgorithmInformation-2009 -- in [RFC5912]
+       { iso(1) identified-organization(3) dod(6) internet(1)
+         security(5) mechanisms(5) pkix(7) id-mod(0)
+         id-mod-algorithmInformation-02(58) }
+     Extensions{}
+     FROM PKIX-CommonTypes-2009 -- in [RFC5912]
+       { iso(1) identified-organization(3) dod(6) internet(1)
+         security(5) mechanisms(5) pkix(7) id-mod(0)
+         id-mod-pkixCommon-02(57) }
+     CertExtensions
+     FROM PKIX1Implicit-2009 -- in [RFC5912]
+       { iso(1) identified-organization(3) dod(6) internet(1)
+         security(5) mechanisms(5) pkix(7) id-mod(0)
+         id-mod-pkix1-implicit-02(59) }
+     Version, Name, Validity, UniqueIdentifier, PublicKeyAlgorithms
+     FROM PKIX1Explicit-2009 -- in [RFC5912]
+       { iso(1) identified-organization(3) dod(6) internet(1)
+         security(5) mechanisms(5) pkix(7) id-mod(0)
+         id-mod-pkix1-explicit-02(51) } ;
+
+   TBSCertificateLogEntry ::= SEQUENCE {
+       version               [0] EXPLICIT Version DEFAULT v1,
+       issuer                    Name,
+       validity                  Validity,
+       subject                   Name,
+       subjectPublicKeyAlgorithm AlgorithmIdentifier{PUBLIC-KEY,
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 83]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+                                     {PublicKeyAlgorithms}},
+       subjectPublicKeyInfoHash  OCTET STRING,
+       issuerUniqueID        [1] IMPLICIT UniqueIdentifier OPTIONAL,
+       subjectUniqueID       [2] IMPLICIT UniqueIdentifier OPTIONAL,
+       extensions            [3] EXPLICIT Extensions{{CertExtensions}}
+                                              OPTIONAL
+   }
+
+   id-alg-mtcProof OBJECT IDENTIFIER ::= {
+       iso(1) identified-organization(3) dod(6) internet(1) security(5)
+       mechanisms(5) pkix(7) algorithms(6) 67 }
+
+   sa-mtcProof SIGNATURE-ALGORITHM ::= {
+       IDENTIFIER id-alg-mtcProof
+       PARAMS ARE absent
+   }
+
+   id-pe-mtcCertificationAuthority-SHA256 OBJECT IDENTIFIER ::= {
+       iso(1) identified-organization(3) dod(6) internet(1) security(5)
+       mechanisms(5) pkix(7) pe(1) 38 }
+
+   ext-mtcCertificationAuthority-SHA256 EXTENSION ::= {
+       SYNTAX MTCCertificationAuthority
+       IDENTIFIED BY id-pe-mtcCertificationAuthority-SHA256
+       CRITICALITY TRUE
+   }
+
+   -- This is 2^48, the minimum possible serial number in this protocol.
+   mtcMinSerial INTEGER ::= 281474976710656
+
+   -- This is 2^64-1, the maximum possible serial number in this protocol.
+   mtcMaxSerial INTEGER ::= 18446744073709551615
+
+   MTCCertificationAuthority ::= SEQUENCE {
+       sigAlg    AlgorithmIdentifier{SIGNATURE-ALGORITHM, {...}},
+       minSerial INTEGER (mtcMinSerial..mtcMaxSerial),
+       maxSerial INTEGER (mtcMinSerial..mtcMaxSerial)
+   }
+
+   END
+

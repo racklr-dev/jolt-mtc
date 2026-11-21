@@ -1,0 +1,848 @@
+Appendix C.  Test Vectors
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 93]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+C.1.  Accumulated Subtree Test Vectors
+
+   The following are "accumulated" [Accumulated] test vectors for the
+   various subtree algorithms defined in Section 4.
+
+   They are hash values of the outputs of all possible inputs for each
+   algorithm, for trees of sizes up to 130.  They can be used to verify
+   that an implementation matches the specification, without having to
+   include a large number of individual test vectors.
+
+   For all the test vectors, a tree D_n of size n is constructed with
+   leaf values d[0] = 0x00, d[1] = 0x01, .... The hash function used is
+   SHA-256.  The hash values are encoded in hexadecimal.
+
+C.1.1.  Subtree Hashes
+
+   For each value of end from 0 to 130, and each value of start from 0
+   to end, if [start, end) is a valid subtree, add to the rolling hash
+   the ASCII string [START, END) HASH followed by a newline (U+000A),
+   where START and END are the decimal representations of start and end,
+   respectively, and HASH is the hexadecimal encoding of
+   MTH(D[start:end]), according to Section 4.
+
+   The final hash value is
+
+   b82806ad4265bb151c1119c0f4db437bb4d1a1f887b3a7fba1cd4ebf552e3e81
+
+   In Python, this can be expressed as:
+
+   import hashlib
+   h = hashlib.sha256()
+   for end in range(0, 131):
+       for start in range(end + 1):
+           if valid_subtree(start, end):
+               subtree_hash = MTH(D[start:end])
+               h.update(f'[{start}, {end}) {subtree_hash.hex()}\n'.encode())
+   assert h.hexdigest() == 'b82806ad4265bb151c1119c0f4db437bb4d1a1f887b3a7fba1cd4ebf552e3e81'
+
+   This test exercises both an implementation's subtree hash calculation
+   as well as the subtree validity check.  In a CA, both of these
+   operations apply.  In a relying party, only the subtree validity
+   check applies.  A relying party implementation SHOULD implement a
+   Merkle Tree in testing logic so the above will exercise the subtree
+   validity check.
+
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 94]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+C.1.2.  Subtree Inclusion Proofs
+
+   For each value of end from 0 to 130, and each value of start from 0
+   to end, if [start, end) is a valid subtree, for each value of index
+   from start to end - 1, add to the rolling hash the ASCII string INDEX
+   [START, END), then, for each hash in the inclusion proof
+   (Section 4.3) for d[index] in the subtree [start, end), a space
+   (U+0020) followed by the hexadecimal encoding of that hash, and
+   finally a newline (U+000A), where INDEX is the decimal representation
+   of index, and START and END are the decimal representations of start
+   and end, respectively.
+
+   The final hash value is
+
+   ac2a8f989e44d99e399db448050ff5f19757df53cfb716aa81015d3955d8163f
+
+   In Python, this can be expressed as:
+
+   import hashlib
+   h = hashlib.sha256()
+   for end in range(0, 131):
+       for start in range(end + 1):
+           if valid_subtree(start, end):
+               for index in range(start, end):
+                   inclusion_proof = get_inclusion_proof(D, start, end, index)
+                   line = f'{index} [{start}, {end})'
+                   for p in inclusion_proof:
+                       line += f' {p.hex()}'
+                   h.update(f'{line}\n'.encode())
+   assert h.hexdigest() == 'ac2a8f989e44d99e399db448050ff5f19757df53cfb716aa81015d3955d8163f'
+
+   This test exercises constructing subtree inclusion proofs, as
+   computed by a CA.  A relying party instead evaluates untrusted
+   subtree inclusion proofs.  This test can be used to exercise this
+   logic as follows:
+
+   1.  If not available, implement a Merkle Tree in testing logic to
+       compute subtree hashes and subtree inclusion proofs.  This logic
+       can be validated by the above test and Appendix C.1.1.
+
+   2.  For each subtree inclusion proof in the above test, evaluate the
+       inclusion proof and assert the resulting hash matches the
+       corresponding subtree hash.
+
+   3.  For each non-empty subtree inclusion proof in the above test,
+       truncate the proof by both one byte and a full hash.  Assert that
+       evaluating each proof fails.
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 95]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   4.  For each subtree inclusion proof in the above test, extend the
+       proof by both one byte and an arbitrary full hash.  Assert that
+       evaluating each proof fails.
+
+C.1.3.  Subtree Consistency Proofs
+
+   For each value of n from 0 to 130, and each value of end from 0 to n,
+   and each value of start from 0 to end, if [start, end) is a valid
+   subtree, add to the rolling hash the ASCII string [START, END) N,
+   then, for each hash in the consistency proof (Section 4.4) for the
+   subtree [start, end) and tree of size n, a space (U+0020) followed by
+   the hexadecimal encoding of that hash, and finally a newline
+   (U+000A), where START and END are the decimal representations of
+   start and end, respectively, and N is the decimal representation of
+   n.
+
+   The final hash value is
+
+   10fa99b37bf9bf9ffa26b412fbd98bd75363256d0b75d61bc4538b9c9c5a0a74
+
+   In Python, this can be expressed as:
+
+   import hashlib
+   h = hashlib.sha256()
+   for n in range(131):
+       for end in range(0, n + 1):
+           for start in range(end + 1):
+               if valid_subtree(start, end):
+                   consistency_proof = get_consistency_proof(D, n, start, end)
+                   line = f'[{start}, {end}) {n}'
+                   for p in consistency_proof:
+                       line += f' {p.hex()}'
+                   h.update(f'{line}\n'.encode())
+   assert h.hexdigest() == '10fa99b37bf9bf9ffa26b412fbd98bd75363256d0b75d61bc4538b9c9c5a0a74'
+
+   This test exercises constructing subtree consistency proofs.  Other
+   parties will check these proofs (e.g. Section 7.4 and
+   [TLOG-WITNESS]).  This test can be used to exercise this logic as
+   follows:
+
+   1.  If not available, implement a Merkle Tree in testing logic to
+       compute subtree hashes and subtree consistency proofs.  This
+       logic can be validated by the above test and Appendix C.1.1.
+
+   2.  For each subtree consistency proof in the above test, check the
+       proof and assert it succeeds.
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 96]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   3.  For each non-empty subtree consistency proof in the above test,
+       truncate the proof by both one byte and a full hash.  Assert that
+       checking each proof fails.
+
+   4.  For each subtree consistency proof in the above test, extend the
+       proof by both one byte and an arbitrary full hash.  Assert that
+       checking each proof fails.
+
+   5.  For each subtree consistency proof in the above test, flip a bit
+       in the input subtree hash.  Assert that checking each proof
+       fails.
+
+   6.  For each subtree consistency proof in the above test with a non-
+       empty subtree, flip a bit in the input tree hash.  Assert that
+       checking each proof fails.
+
+C.1.4.  Efficient Covering Subtrees
+
+   For each value of end from 0 to 130, and each value of start from 0
+   to end, add to the rolling hash the ASCII string [LEFT_START,
+   LEFT_END) [RIGHT_START, RIGHT_END) followed by a newline (U+000A),
+   where LEFT_START, LEFT_END, RIGHT_START, and RIGHT_END are the
+   decimal representations of the start and end of the left and right
+   subtrees, respectively, that efficiently cover (Section 4.5) [start,
+   end).
+
+   The final hash value is
+
+   7fd9c8b926e9d2b5cf831560e8ce295a5ef97ad5c5ede4ea0dea28a8c8fc8bb0
+
+   In Python, this can be expressed as:
+
+   import hashlib
+   h = hashlib.sha256()
+   for end in range(0, 131):
+       for start in range(end + 1):
+           left_start, left_end, right_start, right_end = get_covering_subtrees(start, end)
+           h.update(f'[{left_start}, {left_end}) [{right_start}, {right_end})\n'.encode())
+   assert h.hexdigest() == '7fd9c8b926e9d2b5cf831560e8ce295a5ef97ad5c5ede4ea0dea28a8c8fc8bb0'
+
+C.2.  Large Subtree Test Vectors
+
+   Appendix C.1 exhaustively tests subtree algorithms for trees of size
+   up to 130.  An implementation may also encounter overflow conditions
+   with very large trees.  This is primarily a concern for a relying
+   party, which must act on untrusted tree sizes.
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 97]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   The largest possible Merkle Tree in this protocol is 2^48-1.  In
+   particular, the MTCProof structure in Section 6.2 cannot express
+   larger values.  These sizes will fit comfortably in 64-bit integers,
+   whether signed or unsigned.  To exercise more general
+   implementations, this section includes test vectors for trees bounded
+   by 2^48-1, 2^63-1, and 2^64-1.
+
+   Implementations MAY skip tests above 2^48-1 if they do not support
+   such trees.
+
+C.2.1.  Subtree Validity
+
+   The following are valid subtrees (Section 4.1):
+
+   *  start is 0 and end is 2^47 + 1
+
+   *  start is 0 and end is 2^48 - 1
+
+   *  start is 0 and end is 2^62 + 1
+
+   *  start is 0 and end is 2^63 - 1
+
+   *  start is 0 and end is 2^63 + 1
+
+   *  start is 0 and end is 2^64 - 1
+
+   The following are not valid subtrees:
+
+   *  start is 2^46 and end is 2^47 + 1
+
+   *  start is 2^46 and end is 2^48 - 1
+
+   *  start is 2^61 and end is 2^62 + 1
+
+   *  start is 2^61 and end is 2^63 - 1
+
+   *  start is 2^62 and end is 2^63 + 1
+
+   *  start is 2^62 and end is 2^64 - 1
+
+C.2.2.  Subtree Inclusion Proofs
+
+   [LargeInclusionProofs] contains additional test vectors for subtree
+   inclusion proofs (Section 4.3).
+
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 98]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+C.2.3.  Subtree Consistency Proofs
+
+   [LargeConsistencyProofs] contains additional test vectors for subtree
+   consistency proofs (Section 4.4).
+
+C.2.4.  Efficient Covering Subtrees
+
+   This section contains sample inputs and outputs for the procedure in
+   Section 4.5.1.
+
+   Given range [0x0, 0x800000000000), the subtrees are:
+
+   *  [0x0, 0x400000000000)
+
+   *  [0x400000000000, 0x800000000000)
+
+   Given range [0x500000000000, 0xd00000000000), the subtrees are:
+
+   *  [0x400000000000, 0x800000000000)
+
+   *  [0x800000000000, 0xd00000000000)
+
+   Given range [0x7fffffffffff, 0x800000000001), the subtrees are:
+
+   *  [0x7fffffffffff, 0x800000000000)
+
+   *  [0x800000000000, 0x800000000001)
+
+   Given range [0xfffffffffffe, 0xffffffffffff), the subtrees are:
+
+   *  [0xfffffffffffe, 0xffffffffffff)
+
+   *  [0xffffffffffff, 0xffffffffffff)
+
+   Given range [0xffffffffffff, 0xffffffffffff), the subtrees are:
+
+   *  [0xffffffffffff, 0xffffffffffff)
+
+   *  [0xffffffffffff, 0xffffffffffff)
+
+   Given range [0x0, 0x4000000000000000), the subtrees are:
+
+   *  [0x0, 0x2000000000000000)
+
+   *  [0x2000000000000000, 0x4000000000000000)
+
+   Given range [0x2800000000000000, 0x6800000000000000), the subtrees
+   are:
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 99]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   *  [0x2000000000000000, 0x4000000000000000)
+
+   *  [0x4000000000000000, 0x6800000000000000)
+
+   Given range [0x3fffffffffffffff, 0x4000000000000001), the subtrees
+   are:
+
+   *  [0x3fffffffffffffff, 0x4000000000000000)
+
+   *  [0x4000000000000000, 0x4000000000000001)
+
+   Given range [0x7ffffffffffffffe, 0x7fffffffffffffff), the subtrees
+   are:
+
+   *  [0x7ffffffffffffffe, 0x7fffffffffffffff)
+
+   *  [0x7fffffffffffffff, 0x7fffffffffffffff)
+
+   Given range [0x7fffffffffffffff, 0x7fffffffffffffff), the subtrees
+   are:
+
+   *  [0x7fffffffffffffff, 0x7fffffffffffffff)
+
+   *  [0x7fffffffffffffff, 0x7fffffffffffffff)
+
+   Given range [0x0, 0x8000000000000000), the subtrees are:
+
+   *  [0x0, 0x4000000000000000)
+
+   *  [0x4000000000000000, 0x8000000000000000)
+
+   Given range [0x5000000000000000, 0xd000000000000000), the subtrees
+   are:
+
+   *  [0x4000000000000000, 0x8000000000000000)
+
+   *  [0x8000000000000000, 0xd000000000000000)
+
+   Given range [0x7fffffffffffffff, 0x8000000000000001), the subtrees
+   are:
+
+   *  [0x7fffffffffffffff, 0x8000000000000000)
+
+   *  [0x8000000000000000, 0x8000000000000001)
+
+   Given range [0xfffffffffffffffe, 0xffffffffffffffff), the subtrees
+   are:
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                 [Page 100]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   *  [0xfffffffffffffffe, 0xffffffffffffffff)
+
+   *  [0xffffffffffffffff, 0xffffffffffffffff)
+
+   Given range [0xffffffffffffffff, 0xffffffffffffffff), the subtrees
+   are:
+
+   *  [0xffffffffffffffff, 0xffffffffffffffff)
+
+   *  [0xffffffffffffffff, 0xffffffffffffffff)
+
+Acknowledgements
+
+   This document stands on the shoulders of giants and builds upon
+   decades of work in TLS authentication, X.509, and Certificate
+   Transparency.  The authors would like to thank all those who have
+   contributed over the history of these protocols.
+
+   The authors additionally thank Bob Beck, Corey Bonnell, Ryan Dickson,
+   Aaron Gable, Nick Harper, Jacob Hoffman-Andrews, Russ Housley, Dennis
+   Jackson, Ilari Liusvaara, Matthew McPherrin, Sanketh Menda, Matt
+   Mueller, Mike Ounsworth, Chris Patton, Michael Richardson, Ryan
+   Sleevi, Emily Stark, and Rob Stradling for many valuable discussions
+   and insights which led to this document, as well as feedback and
+   contributions to the document itself.  We wish to thank Mia Celeste
+   in particular, whose implementation of an earlier draft revealed
+   several pitfalls.
+
+   The idea to mint tree heads infrequently was originally described by
+   Richard Barnes in [STH-Discipline].  The size optimization in Merkle
+   Tree Certificates is an application of this idea to the certificate
+   itself.
+
+   The transparency log architecture and APIs are based on designs
+   developed by the Go and Sigsum projects.
+
+Change log
+
+      *RFC Editor's Note:* Please remove this section prior to
+      publication of a final version of this document.
+
+Since draft-davidben-tls-merkle-tree-certs-00
+
+   *  Simplify hashing by removing the internal padding to align with
+      block size. #72
+
+   *  Avoid the temptation of floating points. #66
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                 [Page 101]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   *  Require lifetime to be a multiple of batch_duration. #65
+
+   *  Rename window to validity window. #21
+
+   *  Split Assertion into Assertion and AbridgedAssertion.  The latter
+      is used in the Merkle Tree and HTTP interface.  It replaces
+      subject_info by a hash, to save space by not serving large post-
+      quantum public keys.  The original Assertion is used everywhere
+      else, including BikeshedCertificate. #6
+
+   *  Add proper context to every node in the Merkle Tree. #32
+
+   *  Clarify we use a single CertificateEntry. #11
+
+   *  Clarify we use POSIX time. #1
+
+   *  Elaborate on CA public key and signature format. #27
+
+   *  Miscellaneous changes.
+
+Since draft-davidben-tls-merkle-tree-certs-01
+
+   *  Minor editorial changes
+
+Since draft-davidben-tls-merkle-tree-certs-02
+
+   *  Replace the negotiation mechanism with TLS Trust Anchor
+      Identifiers.
+
+Since draft-davidben-tls-merkle-tree-certs-03
+
+   *  Switch terminology from "subscriber" to "authenticating party".
+
+   *  Use <1..2^24-1> encoding for all certificate types in the
+      CertificateEntry TLS message
+
+   *  Clarify discussion and roles in transparency ecosystem
+
+   *  Update references
+
+Since draft-davidben-tls-merkle-tree-certs-04
+
+   Substantially reworked the design.  The old design was essentially
+   the landmark checkpoint and CA-built logs ideas, but targeting only
+   the optimized and slow issuance path, and with a more bespoke tree
+   structure:
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                 [Page 102]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   In both draft-04 and draft-05, a CA looks like today's CAs except
+   that they run some software to publish what they issue and sign tree
+   heads to certify certificates in bulk.
+
+   In draft-04, the CA software publishes certificates in a bunch of
+   independent Merkle Trees.  This is very easy to do as a collection of
+   highly cacheable, immutable static files because each tree is
+   constructed independently, and never appended to after being built.
+   In draft-05, the certificates are published in a single Merkle Tree.
+   The [TLOG-TILES] interface allows such trees to also use highly
+   cacheable, immutable static files.
+
+   In draft-04, there only are hourly tree heads.  Clients are
+   provisioned with tree heads ahead of time so we can make small,
+   inclusion-proof-only certificates.  In draft-05, the ecosystem must
+   coordinate on defining "landmark" checkpoints.  Clients are
+   provisioned with subtrees describing landmark checkpoints ahead of
+   time so we can make small, inclusion-proof-only certificates.
+
+   In draft-04, each tree head is independent.  In draft-05, each
+   landmark checkpoint contains all the previous checkpoints.
+
+   In draft-04, the independent tree heads were easily prunable.  In
+   draft-05, we define how to prune a Merkle Tree.
+
+   In draft-04, there is no fast issuance mode.  In draft-05, frequent,
+   non-landmark checkpoints can be combined with inclusion proofs and
+   witness signatures for fast issuance.  This is essentially an STH and
+   inclusion proof in CT.
+
+Since draft-davidben-tls-merkle-tree-certs-05
+
+   *  Add some discussion on malleability
+
+   *  Discuss the monitoring impacts of the responsibility shift from CA
+      with log quorum to CA+log with mirror quorum
+
+   *  Sketch out a more concrete initial ACME extension
+
+Since draft-davidben-tls-merkle-tree-certs-06
+
+   *  Fix mistyped reference
+
+   *  Removed now unnecessary placeholder text
+
+   *  First draft at IANA registration and ASN.1 module
+
+   *  Added a prose version of the procedure to select subtrees
+
+
+
+Benjamin, et al.           Expires 6 May 2027                 [Page 103]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   *  Rename 'landmarks checkpoint' to 'landmarks'
+
+   *  Clarify and fix an off-by-one error in recommended landmark
+      allocation scheme
+
+   *  Add some diagrams to the Overview section
+
+Since draft-davidben-tls-merkle-tree-certs-07
+
+   *  Clarify landmark zero
+
+   *  Clarify signature verification process
+
+   *  Improve subtree consistency proof verification algorithm
+
+   *  Add an appendix that explains the Merkle Tree proof procedures
+
+Since draft-davidben-tls-merkle-tree-certs-08
+
+   *  Improvements to malleability discussion
+
+   *  Improvements to subtree definition
+
+   *  Improvements to trust_anchors integration
+
+Since draft-davidben-tls-merkle-tree-certs-09
+
+   *  Editorial fixes
+
+   *  Set a more accurate intended status
+
+   *  Fixes to ASN.1 module
+
+   *  Make log entry more friendly to single-pass verification
+
+Since draft-davidben-tls-merkle-tree-certs-10
+
+   *  Adopted by working group
+
+Since draft-ietf-plants-merkle-tree-certs-00
+
+   *  Address editorial comments from WG adoption call
+
+Since draft-ietf-plants-merkle-tree-certs-01
+
+   *  Renamed full certificate to standalone certificate, signatureless
+      certificate to landmark certificate.
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                 [Page 104]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   *  Included subject public key algorithm in log entries
+
+Since draft-ietf-plants-merkle-tree-certs-02
+
+   *  Renamed landmark certificate to landmark-relative certificate
+
+   *  Relaxed restrictions on null_entry
+
+   *  Clarify that CRLs and OCSPs apply to MTCs unmodified
+
+Since draft-ietf-plants-merkle-tree-certs-03
+
+   *  Use a tlog-compatible signature scheme for ease of deployment
+
+   *  Define a CA certificate representation
+
+   *  Remove the one-to-many relationship between MTC CAs and CA
+      cosigners
+
+   *  Discuss domain separation for signatures
+
+   *  Recommend a maximum log entry size for tlog compatibility
+
+   *  Prescribe landmark OID allocation
+
+   *  Update TLS integration now that trust anchor IDs extension has
+      been moved to the base draft
+
+   *  A single CA now operates a series of issuance logs, instead of a
+      one-to-one correspondence
+
+   *  Group components of a CA into a CA-specific section that
+      enumerates the parts of a CA
+
+   *  Canonicalize the order of cosignatures in MTCProofs
+
+   *  Remove sketch of tlog subtree signer API in favor of
+      https://github.com/C2SP/C2SP/pull/245 in [TLOG-WITNESS]
+
+   *  Add an extensions block to log entries
+
+Since draft-ietf-plants-merkle-tree-certs-04
+
+   *  Fix some mistakes in the single-pass signature verification
+      algorithm
+
+   *  Editorial fixes
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                 [Page 105]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   *  Discuss the implications of subordinate CAs in Security
+      Considerations
+
+   *  Added subtree test vector appendix
+
+   *  Define a CA's current issuance log and rules around that
+
+   *  Switch the ACME construction to a new link relation and change the
+      HTTP status code
+
+   *  Add a maxSerial field to the CA format
+
+Since draft-ietf-plants-merkle-tree-certs-05
+
+   *  Use 24-bit length prefix for MTCProof subtree signatures.
+
+   *  Renamed MerkleTreeCertEntry, etc., structures to MTCLogEntry to be
+      consistent with MTCProof, shorter, and help disambiguate the many
+      English meanings of "entry".
+
+   *  Fixed one of the accumulated test vectors to better reflect one of
+      the edge cases in subtree covering.
+
+   *  Make empty subtrees valid, so the subtree covering function always
+      returns two subtrees.
+
+   *  Add an informative reference to the MTC-TLOG profile (c2sp.org/
+      mtc-tlog) and mention it where tile-based logs are discussed.
+
+   *  Clarify that a landmark consists of both a number and a tree size,
+      and that a landmark's subtrees share its landmark number.
+
+   *  Give an exact procedure for selecting the landmark and covering
+      subtree when constructing a landmark-relative certificate.
+
+   *  Prune the pruning discussion.  It's really a property of the log
+      serving protocol and is better described in [MTC-TLOG] and
+      [TLOG-TILES].
+
+   *  Fix the maximum log index to account for also end being 48-bit.
+
+   *  Discuss a potential overflow in the valid subtree definition.
+
+   *  Describe how a party holding a standalone certificate can
+      construct the corresponding landmark-relative certificate itself.
+
+   *  Added test vectors for subtree algorithms in larger trees.
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                 [Page 106]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   *  Align the experimental OID with the final one in the X.509 name
+      construction in using RELATIVE-OID directly.
+
+   *  Lifted the tree hash into the MTC CA extension OID, so it can
+      capture new tree constructions more generally.
+
+   *  Update for draft-ietf-tls-trust-anchor-ids-05, and spell out
+      certificate configuration explicitly.
+
+   *  Define active landmarks around landmark expiry and put the expiry
+      time in the landmark format.
+
+   *  Fix an interaction between landmark-relative certs and TLS
+      certificate_authorities.
+
+Since draft-ietf-plants-merkle-tree-certs-06
+
+   *  OIDs have been allocated.
+
+   *  Set up registries for extensible parameters.
+
+   *  Allow GREASE cosignatures in MTCProof.
+
+   *  Use versioned URLs for (non-normative) C2SP references.
+
+Since draft-ietf-plants-merkle-tree-certs-07
+
+   *  Moved id-rdna-trustAnchorID to the trust anchor ID draft.
+
+   *  No changes were made to the wire format. draft-07 and draft-08 are
+      compatible.
+
+Authors' Addresses
+
+   David Benjamin
+   Google LLC
+   Email: davidben@google.com
+
+
+   Devon O'Brien
+   Apple Inc.
+   Email: asymmetric@apple.com
+
+
+   Bas Westerbaan
+   Cloudflare
+   Email: bas@cloudflare.com
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                 [Page 107]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   Luke Valenta
+   Cloudflare
+   Email: lvalenta@cloudflare.com
+
+
+   Filippo Valsorda
+   Geomys
+   Email: ietf@filippo.io
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                 [Page 108]

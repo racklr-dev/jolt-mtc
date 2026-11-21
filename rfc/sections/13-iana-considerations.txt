@@ -1,0 +1,175 @@
+13.  IANA Considerations
+
+13.1.  Additions to Existing Registries
+
+13.1.1.  Module Identifier
+
+   IANA is requested to add the following entry in the "SMI Security for
+   PKIX Module Identifier" registry [RFC7299]:
+
+                +=========+=================+============+
+                | Decimal | Description     | References |
+                +=========+=================+============+
+                | TBD     | id-mod-mtc-2025 | [this-RFC] |
+                +---------+-----------------+------------+
+
+                                 Table 1
+
+13.1.2.  Algorithm
+
+   IANA is requested to add the following entry to the "SMI Security for
+   PKIX Algorithms" registry [RFC7299]:
+
+
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 75]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+                +=========+=================+============+
+                | Decimal | Description     | References |
+                +=========+=================+============+
+                | 67      | id-alg-mtcProof | [this-RFC] |
+                +---------+-----------------+------------+
+
+                                 Table 2
+
+13.1.3.  Certificate Extension
+
+   IANA is requested to add the following entry to the "SMI Security for
+   PKIX Certificate Extension" registry [RFC7299]:
+
+     +=========+========================================+============+
+     | Decimal | Description                            | References |
+     +=========+========================================+============+
+     | 38      | id-pe-mtcCertificationAuthority-SHA256 | [this-RFC] |
+     +---------+----------------------------------------+------------+
+
+                                  Table 3
+
+13.1.4.  Link Relation Type
+
+   IANA is requested to add the following entry to the "Link Relation
+   Types" registry [RFC8288]:
+
+   Relation Name:  acme-optional-alternate
+
+   Description:  Refers to an optional alternate certificate chain,
+      which may not be available immediately.  Relying parties that
+      accept the alternate are expected to also accept the original
+      certificate, so it is not an error if the alternate is
+      unavailable.
+
+   Reference:  [this-RFC], Section 9.1
+
+13.2.  New Registries
+
+   IANA is requested to add a new top-level registry, "Merkle Tree
+   Certificates", to the "Protocol Registries" page at
+   https://www.iana.org/protocols (https://www.iana.org/protocols)
+
+   The rest of this section defines the subregistries requested within
+   the new "Merkle Tree Certificates" registry.
+
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 76]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+13.2.1.  MTC Log Entry Types
+
+   IANA is requested to add a new registry, "MTC Log Entry Types" with
+   the following registration policies from [RFC8126]:
+
+               +=================+========================+
+               | Range           | Registration Policy    |
+               +=================+========================+
+               | 0x0000 - 0xEFFF | Specification Required |
+               +-----------------+------------------------+
+               | 0xF000 - 0xFFFF | Private Use            |
+               +-----------------+------------------------+
+
+                                 Table 4
+
+   The registry initially consists of:
+
+        +=================+==========================+============+
+        | Value           | Name                     | Reference  |
+        +=================+==========================+============+
+        | 0x0000          | null_entry               | [this-RFC] |
+        +-----------------+--------------------------+------------+
+        | 0x0001          | tbs_cert_entry           | [this-RFC] |
+        +-----------------+--------------------------+------------+
+        | 0x0002 - 0xEFFF | Unassigned               |            |
+        +-----------------+--------------------------+------------+
+        | 0xF000 - 0xFFFF | Reserved for Private Use | [this-RFC] |
+        +-----------------+--------------------------+------------+
+
+                                  Table 5
+
+13.2.2.  MTC Log Entry Extension Types
+
+   IANA is requested to add a new registry, "MTC Log Entry Extension
+   Types" with the following registration policies from [RFC8126]:
+
+               +=================+========================+
+               | Range           | Registration Policy    |
+               +=================+========================+
+               | 0x0000 - 0xEFFF | Specification Required |
+               +-----------------+------------------------+
+               | 0xF000 - 0xFFFF | Private Use            |
+               +-----------------+------------------------+
+
+                                 Table 6
+
+   The registry initially consists of:
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 77]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+        +=================+==========================+============+
+        | Value           | Name                     | Reference  |
+        +=================+==========================+============+
+        | 0x0000 - 0xEFFF | Unassigned               |            |
+        +-----------------+--------------------------+------------+
+        | 0xF000 - 0xFFFF | Reserved for Private Use | [this-RFC] |
+        +-----------------+--------------------------+------------+
+
+                                  Table 7
+
+13.2.3.  MTC CA Identifier Child Components
+
+   IANA is requested to add a new registry, "MTC CA Identifier Child
+   Components", whose registration policy is Specification Required
+   [RFC8126].  Values shall be any non-negative integer.  The registry
+   initially consists of:
+
+                  +=======+================+============+
+                  | Value | Name           | Reference  |
+                  +=======+================+============+
+                  | 0     | logs           | [this-RFC] |
+                  +-------+----------------+------------+
+                  | 1     | landmarks      | [this-RFC] |
+                  +-------+----------------+------------+
+                  | 2     | landmarkGroups | [this-RFC] |
+                  +-------+----------------+------------+
+
+                                  Table 8
+

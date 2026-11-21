@@ -1,0 +1,423 @@
+7.  Relying Parties
+
+   This section discusses how relying parties verify Merkle Tree
+   Certificates.
+
+7.1.  Relying Party Configuration
+
+   In order to accept certificates from a Merkle Tree CA, a relying
+   party MUST be configured with:
+
+   *  The CA's ID (Section 5.1)
+
+   *  The CA's log hash algorithm, e.g. SHA-256
+
+   *  The CA cosigner, and any other supported cosigners, as pairs of
+      cosigner ID and public key
+
+   *  A policy on which combinations of cosigners to accept in a
+      certificate (Section 7.3)
+
+   *  An optional list of trusted subtrees that are known to be
+      consistent with the relying party's cosigner requirements
+      (Section 7.4)
+
+   *  A list of revoked ranges of serial numbers (Section 7.5)
+
+   This information may be obtained from a CA certificate structure,
+   defined in Section 5.5:
+
+   *  The CA ID is determined from the certificate's subject.  Note
+      that, while a general RELATIVE-OID can be arbitrarily long,
+      Section 4 of [I-D.ietf-tls-trust-anchor-ids] limits trust anchor
+      IDs to 32 bytes.
+
+   *  The log hash algorithm is determined from the type of the Merkle
+      Tree CA extension.
+
+   *  The CA cosigner is determined from the certificate's subject
+      public key and Merkle Tree CA extension.  The CA's cosigner ID is
+      the same as its CA ID.  The relying party incorporates this
+      cosigner into its cosigner policy based on the guidance in
+      Section 7.3.
+
+   *  No trusted subtrees are directly represented by the CA certificate
+      structure, but the relying party MAY incorporate trusted subtrees
+      from out-of-band information.
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 48]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   *  The revoked serial number ranges include the half-open ranges [0,
+      minSerial) and [maxSerial+1, 2^64), but the relying party MAY
+      incorporate additional ranges from out-of-band information.
+
+7.2.  Verifying Certificate Signatures
+
+   When verifying the signature of an X.509 certificate (Step (a)(1) of
+   Section 6.1.3 of [RFC5280]) whose issuer is a Merkle Tree CA, the
+   relying party performs the following procedure:
+
+   1.   Check that the TBSCertificate's signature field is id-alg-
+        mtcProof with omitted parameters.  If this check fails, abort
+        this process and fail verification.
+
+   2.   Decode the signatureValue as an MTCProof, as described in
+        Section 6.2.  If decoding fails, including if signatureValue is
+        not a multiple of 8 bits or has extra data after the MTCProof,
+        abort this process and fail verification.
+
+   3.   Let serial be the certificate's serial number.  If serial is
+        negative or greater than 2^64-1, abort this process and fail
+        verification.
+
+   4.   If serial is contained in one of the relying party's revoked
+        ranges (Section 7.5), abort this process and fail verification.
+
+   5.   Let index be the least significant 48 bits of serial and let
+        log_number be serial >> 48.  If log_number is zero, abort this
+        process and fail verification.
+
+   6.   Let log_id be the log ID constructed from the CA ID in issuer
+        and the log_number (Section 5.2).
+
+   7.   Construct a TBSCertificateLogEntry as follows:
+
+        1.  Copy the version, issuer, validity, subject, issuerUniqueID,
+            subjectUniqueID, and extensions fields from the
+            TBSCertificate.
+
+        2.  Set subjectPublicKeyAlgorithm to the algorithm field of the
+            subjectPublicKeyInfo.
+
+        3.  Set subjectPublicKeyInfoHash to the hash of the DER encoding
+            of subjectPublicKeyInfo.
+
+   8.   Construct an MTCLogEntry as follows:
+
+        1.  Set type to tbs_cert_entry.
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 49]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+        2.  Set extensions to the MTCProof's extensions value.
+
+        3.  Set tbs_cert_entry_data to the TBSCertificateLogEntry,
+            encoded as described in Section 5.2.1.
+
+   9.   Let entry_hash be the hash of the entry, MTH({entry}) =
+        HASH(0x00 || entry), as defined in Section 2.1.1 of [RFC9162].
+
+   10.  Let expected_subtree_hash be the result of evaluating the
+        MTCProof's inclusion_proof for entry index, with hash
+        entry_hash, of the subtree described by the MTCProof's start and
+        end, following the procedure in Section 4.3.2.  If evaluation
+        fails, abort this process and fail verification.
+
+   11.  If log_number, start, and end match a trusted subtree
+        (Section 7.4) for the CA, check that expected_subtree_hash is
+        equal to the trusted subtree's hash.  Return success if it
+        matches and failure if it does not.
+
+   12.  Otherwise, check that the MTCProof's signatures contain a
+        sufficient set of valid signatures from cosigners to satisfy the
+        relying party's cosigner requirements (Section 7.3).
+        Unrecognized cosigners MUST be ignored.
+
+        Signatures are verified as described in Section 5.3.1.  For each
+        signature verification, the CosignedSubtree structure is
+        constructed as follows:
+
+        1.  Set the CosignedSubtree's cosigner_name based on the
+            cosigner ID as described in Section 5.3.1.
+
+        2.  Set the CosignedSubtree's timestamp to zero.
+
+        3.  Set the CosignedSubtree's log_origin based on log_id as
+            described in Section 5.3.1.
+
+        4.  Set the CosignedSubtree's start and end to the MTCProof's
+            start and end, respectively.
+
+        5.  Set the CosignedSubtree's subtree_hash to
+            expected_subtree_hash.
+
+   This procedure only replaces the signature verification portion of
+   X.509 path validation.  The relying party MUST continue to perform
+   other checks, such as checking expiry.
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 50]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   In this procedure, entry_hash can equivalently be computed in a
+   single pass from the DER-encoded TBSCertificate, without storing the
+   full TBSCertificateLogEntry or MTCLogEntry in memory:
+
+   1.   Initialize a hash instance.
+
+   2.   Write the octet 0x00 to the hash.  This is the domain separator
+        for leaf nodes.
+
+   3.   Write the extensions field from the MTCProof to the hash.
+
+   4.   Write the big-endian, two-byte tbs_cert_entry value to the hash.
+
+   5.   Write the TBSCertificate's version, issuer, validity, and
+        subject fields to the hash.
+
+   6.   Write the subjectPublicKeyInfo's algorithm field to the hash.
+
+   7.   Write the octet 0x04 to the hash.  This is an OCTET STRING
+        identifier.
+
+   8.   Write the octet L to the hash, where L is the hash length.
+        (This assumes L is at most 127.)
+
+   9.   Write H to the hash, where H is the hash of the entire
+        subjectPublicKeyInfo field.
+
+   10.  Write the remainder of the TBSCertificate contents octets to the
+        hash, starting just after the subjectPublicKeyInfo field.
+
+   11.  Finalize the hash and set entry_hash to the result.
+
+   This is possible because the structure in Section 5.2.1 omits the
+   TBSCertificateLogEntry's identifier and length octets.
+
+7.3.  Trusted Cosigners
+
+   A relying party's cosigner policy determines the sets of cosigners
+   that must sign a view of the issuance log before it is trusted.
+
+   This document does not prescribe a particular policy, but gives
+   general guidance.  Relying parties MAY implement policies other than
+   those described below, and MAY incorporate cosigners acting in roles
+   not described in this document.
+
+   In picking trusted cosigners, the relying party SHOULD ensure the
+   following security properties:
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 51]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   Authenticity:  The relying party only accepts entries certified by
+      the CA
+
+   Transparency:  The relying party only accepts entries that are
+      publicly accessible, so that monitors, particularly the subject of
+      the certificate, can notice any unauthorized certificates
+
+   Relying parties SHOULD ensure authenticity by requiring a signature
+   from the CA cosigner key.  This is analogous to the signature in a
+   directly-signed X.509 certificate.  If the relying party obtains CA
+   information from a CA certificate, the CA cosigner key is determined
+   as in Section 7.1.
+
+   While a CA signature is sufficient to prove a subtree came from the
+   CA, this is not enough to ensure the certificate is visible to
+   monitors.  A misbehaving CA might not operate the log correctly,
+   either presenting inconsistent versions of the log to relying parties
+   and monitors, or refusing to publish some entries.
+
+   To mitigate this, relying parties SHOULD ensure transparency by
+   requiring a quorum of signatures from additional cosigners.  At
+   minimum, these cosigners SHOULD enforce a consistent view of the log.
+   For example, [TLOG-WITNESS] describes a lightweight "witness"
+   cosigner role that checks this with consistency proofs.  This is not
+   sufficient to ensure durable logging.  Section 7.5 discusses
+   mitigations for this.  Alternatively, a relying party MAY require
+   that cosigners serve a copy of the log, in addition to enforcing a
+   consistent view.  For example, [TLOG-MIRROR] describes a "mirror"
+   cosigner role.
+
+   Relying parties MAY accept the same set of additional cosigners
+   across CAs.
+
+   In applications that do not enforce transparency requirements, a
+   relying party MAY implement a policy that only checks for a signature
+   from the CA cosigner.  This fits the pattern of many existing X.509
+   applications, where CA information is determined directly from a CA
+   certificate, with no additional out-of-band information.
+   Unrecognized cosignatures are ignored, so such applications can
+   interoperate with certificates issued for transparency-enforcing
+   applications that require additional cosigners.
+
+   Cosigner roles are extensible without changes to certificate
+   verification itself.  Future specifications and individual
+   deployments MAY define other cosigner roles to incorporate in relying
+   party policies.
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 52]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   Section 10.2 discusses additional deployment considerations in
+   cosigner selection.
+
+7.4.  Trusted Subtrees
+
+   As an optional optimization, a relying party MAY incorporate a
+   periodically updated, predistributed list of trusted subtrees from
+   the CA.  This allows the relying party to accept landmark-relative
+   certificates (Section 6.4) constructed against those subtrees.
+
+   Each trusted subtree contains:
+
+   *  The log number of the containing log
+
+   *  The start and end values that define the subtree
+
+   *  The hash of the subtree
+
+   Trusted subtrees for a CA are determined by its active landmark
+   subtrees, as described in Section 6.4.1.  Before configuring the
+   subtrees as trusted, the relying party MUST obtain assurance that
+   each subtree is consistent with checkpoints observed by a sufficient
+   set of cosigners (see Section 5.3) to meet its cosigner requirements.
+   It is not necessary that the cosigners have generated signatures over
+   the specific subtrees, only that they are consistent.
+
+   This criterion can be checked given:
+
+   *  Some _reference checkpoint_ whose tree size is greater or equal to
+      that of the latest landmark
+
+   *  For each cosigner, either:
+
+      -  A cosignature on the reference checkpoint
+
+      -  A cosigned checkpoint containing the referenced checkpoint and
+         a valid Merkle consistency proof (Section 2.1.4 of [RFC9162])
+         between the two
+
+   *  For each subtree, a valid subtree consistency proof (Section 4.4)
+      between the subtree and the reference checkpoint
+
+
+
+
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 53]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   If a relying party is unable to validate some active landmark, it MAY
+   discard that landmark, along with all landmarks in the log newer than
+   it, while still using the older active landmarks that it was able to
+   validate.  For example, suppose the active landmarks have tree sizes
+   200, 300, 400, and 500, and the relying party was unable to validate
+   any reference checkpoint of size 500 or higher.  If the relying party
+   is able to validate a reference checkpoint of size 350, it MAY
+   incorporate subtrees from the first two landmarks.
+
+   To bound local state, the relying party SHOULD define some upper
+   bound on the number of active landmarks accepted per CA.  If the CA
+   exceeds this bound, the relying party SHOULD similarly discard the
+   newest active landmarks to meet its limit.
+
+   This document does not prescribe how relying parties obtain trusted
+   subtrees.  A relying party MAY, for example, use an application-
+   specific update service, such as the services described in [CHROMIUM]
+   and [FIREFOX].  If the relying party considers the service
+   sufficiently trusted (e.g. if the service provides the trust anchor
+   list or certificate validation software), it MAY trust the update
+   service to perform these checks.
+
+   The relying party SHOULD incorporate its trusted subtree
+   configuration in application-protocol-specific certificate selection
+   mechanisms, to allow an authenticating party to select a landmark-
+   relative certificate.  The trust anchor IDs of the landmarks may be
+   used as efficient identifiers in the application protocol.  Section 8
+   discusses how to do this in TLS [RFC9846].
+
+7.5.  Revoked Ranges
+
+   For each supported Merkle Tree CA, the relying party maintains a list
+   of revoked ranges of serial numbers.  This can be used to revoke both
+   ranges of entries in an issuance log and ranges of issuance logs,
+   even if the contents are not known.
+
+   When a relying party is first configured to trust an issuance log, it
+   SHOULD be configured to revoke all serial numbers before the first
+   available unexpired certificate at the time.  This revocation SHOULD
+   be periodically updated as entries expire.  If using the format
+   defined in Section 5.5, this can be configured with the minSerial
+   value.
+
+   This revocation allows the rest of a PKI to disregard old entries,
+   even if they are not known to be expired.  In particular:
+
+   *  A relying party could permit a CA to skip serving old entries (see
+      Section 5.2.2) if long-expired and revoked.
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 54]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   *  Newly-established monitors can skip processing long-expired and
+      revoked entries.
+
+   A relying party with transparency requirements additionally SHOULD
+   revoke all log numbers above some threshold to bound monitoring
+   overhead.  If using the format defined in Section 5.5, this can be
+   configured with the maxSerial value.  See Section 12.2.2.
+
+   A misbehaving CA might correctly construct a globally consistent log,
+   but refuse to make some entries or intermediate nodes available.
+   Consistency proofs between checkpoints and subtrees would pass, but
+   monitors cannot observe the entries themselves.  Relying parties
+   whose cosigner policies (Section 7.3) do not require durable logging
+   (e.g. via [TLOG-MIRROR]) are particularly vulnerable to this.  In
+   this case, the indices of the missing entries will still be known, so
+   relying parties can use this mechanism to revoke the unknown entries,
+   possibly as an initial, targeted mitigation before complete CA
+   removal.
+
+   When a CA is found to be untrustworthy, relying parties SHOULD remove
+   trust in that CA.  To minimize the compatibility impact of this
+   mitigation, index-based revocation can be used to only distrust
+   entries after some index, while leaving existing entries accepted.
+   This is analogous to the [SCTNotAfter] mechanism used in some PKIs.
+
+   The revocation mechanism in this section is complementary to
+   certificate-level revocation mechanisms.  Because log entries are
+   uniquely identified by their serial number and issuer, existing
+   revocation mechanisms like CRLs [RFC5280] and OCSP [RFC6960] apply
+   unchanged.
+

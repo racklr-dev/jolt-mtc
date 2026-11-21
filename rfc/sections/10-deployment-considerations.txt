@@ -1,0 +1,225 @@
+10.  Deployment Considerations
+
+10.1.  Operational Costs
+
+10.1.1.  Certification Authority Costs
+
+   While Merkle Tree certificates expect CAs to operate logs, the costs
+   of these logs are expected to be much lower than a CT log from
+   [RFC6962] or [RFC9162]:
+
+   Section 5.2.2 does not constrain the API to the one defined in
+   [RFC6962] or [RFC9162].  If the PKI uses a tile-based protocol, such
+   as [TLOG-TILES] (profiled for Merkle Tree Certificates in
+   [MTC-TLOG]), the issuance log benefits from the improved caching
+   properties of such designs.
+
+   Unlike a CT log, an issuance log does not have public submission
+   APIs.  Log entries are only added by the CA directly.  Costs are thus
+   expected to scale with the CA's own issuance.
+
+   A CA only needs to produce a digital signature for every checkpoint,
+   rather than for every certificate.  The lower signature rate
+   requirements could allow more secure and/or economical key storage
+   choices.
+
+   Individual entries are kept small and do not scale with public key or
+   signature sizes.  This mitigates growth from post-quantum algorithms.
+   Public keys in entries are replaced with fixed-sized hashes.  There
+   are no signatures in entries themselves, and only signatures on the
+   very latest checkpoint are retained.  Every new checkpoint completely
+   subsumes the old checkpoint, so there is no need to retain older
+   signatures.  Likewise, a subtree is only signed if contained in
+   another signed checkpoint.
+
+
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 62]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   Explicit revocation of old entries (Section 7.5) allows a long-lived
+   log to serve only the more recent entries, scaling with the size of
+   the retention window, rather than the log's total lifetime.
+
+   Mirrors of the log can also reduce CA bandwidth costs, because
+   monitors can fetch data from mirrors instead of CAs directly.  In
+   PKIs that deploy mirrors as part of cosigner policies, relying
+   parties could set few availability requirements on CAs, as described
+   in Section 10.3.
+
+10.1.2.  Cosigner Costs
+
+   The costs of cosigners vary by cosigner role.  A consistency-checking
+   cosigner, such as [TLOG-WITNESS], requires very little state and can
+   be run with low cost.
+
+   A mirroring cosigner, such as [TLOG-MIRROR], performs a role
+   comparable to CT logs, but several of the cost-saving properties in
+   Section 10.1.1 also apply: improved protocols, smaller entries, less
+   frequent signatures, and partial log serving.  While a mirror does
+   need to accommodate another party's (the CA's) growth rate, it grows
+   only from new issuances from that one CA.  If one CA's issuance rate
+   exceeds the mirror's capacity, that does not impact the mirror's
+   copies of other CAs.  Mirrors also do not need to defend against a
+   client uploading a large number of existing certificates all at once.
+   Submissions are naturally batched and serialized.
+
+10.1.3.  Monitor Costs
+
+   In a CT-based PKI, every log carries a potentially distinct subset of
+   active certificates.  Monitors must check the contents of every CT
+   log.  At the same time, certificates are commonly synchronized
+   between CT logs.  As a result, a monitor will typically download each
+   certificate multiple times, once for every log.  In Merkle Tree
+   Certificates, each entry appears in exactly one log.  A relying party
+   might require a log to be covered by a quorum of mirrors, but each
+   mirror is cryptographically verified to serve the same contents.
+   Once a monitor has obtained some entry from one mirror, it does not
+   need to download it from the others.
+
+   In addition to downloading each entry only once, the entries
+   themselves are smaller, as discussed in Section 10.1.1.
+
+10.2.  Choosing Cosigners
+
+   In selecting trusted cosigners and cosigner requirements
+   (Section 7.3), relying parties navigate a number of trade-offs:
+
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 63]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   A consistency-checking cosigner, such as [TLOG-WITNESS], is
+   inexpensive to run, but does not guarantee durable logging.  A
+   mirroring cosigner is more expensive and may take longer to cosign
+   structures.  Requiring a mirror signature provides stronger
+   guarantees to the relying party, which in turn can reduce the
+   requirements on CAs (see Section 10.3), however it may cause
+   certificate issuance to take longer.  That said, mirrors are
+   comparable to CT logs, if not cheaper (see Section 10.1), so they may
+   be appropriate in PKIs where running CT logs is already viable.
+
+   Relying parties that require larger quorums of trusted cosigners can
+   reduce the trust placed in any individual cosigner.  However, larger
+   quorums result in larger, more expensive standalone certificates.
+   The cost of standalone certificates will depend on how frequently the
+   landmark optimization occurs in a given PKI.  Conversely, relying
+   parties that require smaller quorums have smaller standalone
+   certificates, but place more trust in their cosigners.
+
+   Relying party policies also impact monitor operation.  If a relying
+   party accepts any one of three cosigners, monitors SHOULD check the
+   checkpoints of all three.  Otherwise, a malicious CA may send
+   different split views to different cosigners.  More generally,
+   monitors SHOULD check the checkpoints in the union of all cosigners
+   trusted by all supported relying parties.  This is an efficient check
+   because, if the CA is operating correctly, all cosigners will observe
+   the same tree.  Thus the monitor only needs to check consistency
+   proofs between the checkpoints, and check the log contents themselves
+   once.  Monitors MAY also rely on other parties in the transparency
+   ecosystem to perform this check.
+
+10.3.  Log Availability
+
+   CAs and mirrors are expected to serve their log contents over HTTP.
+   It is possible for the contents to be unavailable, either due to
+   temporary service outage or because the log does not serve long-
+   expired entries.  If some resources are unavailable, they may not be
+   visible to monitors.
+
+   As in CT, PKIs that deploy Merkle Tree certificates SHOULD establish
+   availability policies.  These policies SHOULD be adhered to by
+   trusted CAs and mirrors, and enforced by relying party vendors as a
+   condition of trust.  Exact availability policies for these services
+   are out of scope for this document, but this section provides some
+   general guidance.
+
+   Availability policies MAY permit CAs and mirrors to stop serving old,
+   long-expired entries.  If so, such policies SHOULD, at minimum,
+   require CAs and mirrors to retain entries until they have been
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 64]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   revoked in up-to-date relying parties.  See Section 7.5 for details.
+   This is analogous to the CT practice of temporal sharding
+   [CHROME-CT], except the issuance log remains compatible with older,
+   unupdated relying parties.
+
+   PKIs that require mirror cosignatures (Section 7.3) can impose
+   minimal to no availability requirements on CAs without compromising
+   transparency goals.  If a CA never makes an entry available, mirrors
+   will be unable to update.  This will prevent relying parties from
+   accepting the undisclosed entries.  However, a CA that is
+   persistently unavailable may not offer sufficient benefit to be used
+   by authenticating parties or trusted by relying parties.
+
+   However, if a mirror's interface becomes unavailable, monitors may be
+   unable to check for unauthorized issuance, if the entries are not
+   available in another mirror.  This does compromise transparency
+   goals.  As such, availability policies SHOULD set availability
+   expectations on mirrors.  This can also be mitigated by using
+   multiple mirrors, either directly enforced in cosigner requirements,
+   or by keeping mirrors up-to-date with each other.
+
+   In PKIs that do not require mirroring cosigners, the CA's serving
+   endpoint is more crucial for monitors.  Such PKIs SHOULD set
+   availability requirements on CAs.
+
+   In each of these cases, the serial numbers of unavailable entries are
+   known.  Availability failures can thus be mitigated by revocation, as
+   described in Section 7.5, likely as a first step in a broader
+   distrust.
+
+10.4.  Certificate Renewal
+
+   When an authenticating party requests a certificate, the landmark-
+   relative certificate will not be available until the next landmark is
+   ready.  From there, the landmark-relative certificate will not be
+   available until relying parties receive new trusted subtrees.
+
+   To maximize coverage of landmark-relative certificates,
+   authenticating parties performing routine renewal SHOULD request a
+   new Merkle Tree certificate before the previous Merkle Tree
+   certificate expires.  Renewing around 75% of the way through the
+   previous certificate's lifetime is RECOMMENDED.  Authenticating
+   parties additionally SHOULD retain both the new and old certificates
+   in the certificate set until the old certificate expires.  As the new
+   subtrees are delivered to relying parties, certificate negotiation
+   will transition relying parties to the new certificate, while
+   retaining the old certificate for relying parties that are not yet
+   updated.
+
+
+
+Benjamin, et al.           Expires 6 May 2027                  [Page 65]
+
+Internet-Draft          Merkle Tree Certificates           November 2026
+
+
+   The above also applies if the authenticating party is performing a
+   routine key rotation alongside the routine renewal.  In this case,
+   certificate negotiation would pick the key as part of the certificate
+   selection.  This slightly increases the lifetime of the old key but
+   maintains the size optimization continuously.
+
+   If the service is rotating keys in response to a key compromise, this
+   option is not appropriate.  Instead, the service SHOULD immediately
+   discard the old key and request a standalone certificate and the
+   revocation of the previous certificate.  This will interrupt the size
+   optimization until the new landmark-relative certificate is available
+   and relying parties are updated.
+
