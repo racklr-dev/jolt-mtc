@@ -85,6 +85,9 @@
   (try
     (let [cert (x/parse-certificate cert-der)
           tbs (x/parse-tbs-certificate (:tbs-certificate cert))
+          _ (when-not (and (x/mtc-proof-alg-id? (:signature tbs))
+                           (x/mtc-proof-alg-id? (:signature-algorithm cert)))
+              (throw (ex-info "signatureAlgorithm is not id-alg-mtcProof" {})))
           ca-id (x/decode-trust-anchor-name (:issuer tbs))
           serial (:serial-number tbs)
           mtc-proof (cert/decode-mtc-proof (x/mtc-proof-bytes cert))

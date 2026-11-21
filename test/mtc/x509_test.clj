@@ -35,6 +35,12 @@
   (check "alg-id oid" [1 2 840 113549 1 1 1] (first dec))
   (check "alg-id params null" [:null] (second dec)))
 
+;; AlgorithmIdentifier with parameters omitted (id-alg-mtcProof)
+(let [enc (der/encode [:seq [:oid [1 3 6 1 5 5 7 6 67]]])
+      dec (x/decode-alg-id enc)]
+  (check "alg-id omitted-params oid" [1 3 6 1 5 5 7 6 67] (first dec))
+  (check "alg-id omitted-params nil" nil (second dec)))
+
 ;; Trust anchor ID distinguished name (trust-anchor-ids Section 4.1)
 ;; The DER RELATIVE-OID for 32473.1 is 0d 04 81 fd 59 01.
 (let [name (x/encode-trust-anchor-name [32473 1])

@@ -76,7 +76,7 @@
     (when-not (= :seq (first v))
       (throw (ex-info "AlgorithmIdentifier must be a SEQUENCE" {})))
     (let [oid-v (second v)
-          params (nth v 2)]
+          params (when (< 2 (count v)) (nth v 2))]
       (when-not (= :oid (first oid-v))
         (throw (ex-info "AlgorithmIdentifier algorithm must be an OID" {})))
       [(second oid-v) params])))
@@ -89,6 +89,13 @@
   (let [out (byte-array len)]
     (dotimes [i len] (aset out i (aget bytes (+ off i))))
     out))
+
+(defn mtc-proof-alg-id?
+  "True when a DER AlgorithmIdentifier is id-alg-mtcProof with parameters
+  omitted (RFC 6.2 / 7.2 step 1)."
+  [alg-id-der]
+  (let [[oid params] (decode-alg-id alg-id-der)]
+    (and (= [1 3 6 1 5 5 7 6 67] oid) (nil? params))))
 
 (defn parse-certificate
   "Parse a DER X.509 Certificate into {:tbs-certificate :signature-algorithm

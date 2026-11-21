@@ -31,8 +31,11 @@ Namespaces (all passing `jolt run test/mtc/<test>.clj`):
 - `mtc.cosigner` — CosignedSubtree sign/verify (RFC 5.3)
 - `mtc.sig` — real signature algorithms (Ed25519/ECDSA/RSA) via jolt-lang/crypto
 - `mtc.certificate` — MTCProof/Cosignature + serialNumber (RFC 6)
-- `mtc.ca` — MTCCertificationAuthority (RFC 5.5)
+- `mtc.ca` — MTCCertificationAuthority + its X.509 Extension (RFC 5.5)
 - `mtc.landmarks` — landmark sequences + strict publish format (RFC 6.4)
+- `mtc.anchors` — trust anchor IDs + the TLS trust_anchors extension (RFC 5.1/8)
+- `mtc.acme` — ACME link relation + content type (RFC 9)
+- `mtc.iana` — the RFC 13 IANA OIDs and registry values
 - `mtc.x509` — Name/Validity/AlgorithmIdentifier codec + Certificate/TBSCertificate parser
 - `mtc.relying-party` — certificate verification, including full DER cert
   (verify-certificate, RFC 7.2)

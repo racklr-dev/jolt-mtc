@@ -97,4 +97,13 @@
       reconstructed (x/mtc-log-entry-bytes-from-tbs sha/digest tbs [])]
   (check "reconstructed entry == log entry" true (m/bytes= (entries idx) reconstructed)))
 
+;; wrong signatureAlgorithm (not id-alg-mtcProof) rejected
+(let [wrong (x/encode-alg-id [1 2 840 113549 1 1 1] nil)
+      bad-cert (der/encode
+                 [:seq
+                  [:raw (der/encode [:seq [:ctx 0 [:int 2]] [:int serial] [:raw wrong] [:raw issuer-name] [:raw validity] [:raw (subject-name idx)] [:raw spki]])]
+                  [:raw wrong]
+                  [:bitstring (cert/encode-mtc-proof mtc-proof)]])]
+  (check "wrong signatureAlgorithm rejected" false (rp/verify-certificate config bad-cert)))
+
 (println "All certificate-flow tests passed")

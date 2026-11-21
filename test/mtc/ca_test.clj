@@ -23,4 +23,14 @@
 
 (check "oid arcs" [1 3 6 1 5 5 7 1 38] ca/mtc-ca-sha256-oid)
 
+;; full X.509 Extension wrapper (RFC 5.5)
+(let [ca {:sig-alg (der/encode [:seq [:oid [1 2 840 113549 1 1 1]] [:null]])
+          :min-serial 281474976710656
+          :max-serial 18446744073709551615}
+      ext (ca/encode-mtc-ca-extension ca)
+      dec (ca/decode-mtc-ca-extension ext)]
+  (check "extension roundtrip min-serial" 281474976710656 (:min-serial dec))
+  (check "extension roundtrip max-serial" 18446744073709551615 (:max-serial dec))
+  (check "extension re-encode stable" (hex ext) (hex (ca/encode-mtc-ca-extension dec))))
+
 (println "All CA tests passed")

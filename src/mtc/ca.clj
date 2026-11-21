@@ -34,6 +34,37 @@
     (dotimes [i len] (aset out i (aget bytes (+ off i))))
     out))
 
+(declare decode-mtc-ca)
+
+(defn encode-mtc-ca-extension
+  "Encode the full X.509 Extension carrying an MTCCertificationAuthority:
+  SEQUENCE { OID id-pe-mtcCertificationAuthority-SHA256, BOOLEAN critical TRUE,
+  OCTET STRING (the DER MTCCertificationAuthority) } (RFC 5.5)."
+  [ca]
+  (der/encode [:seq
+               [:oid mtc-ca-sha256-oid]
+               [:bool true]
+               [:octets (encode-mtc-ca ca)]]))
+
+(defn decode-mtc-ca-extension
+  "Decode the full X.509 Extension back into the MTCCertificationAuthority map."
+  [bytes]
+  (let [[v _] (der/decode bytes)]
+    (when-not (= :seq (first v))
+      (throw (ex-info "Extension must be a SEQUENCE" {})))
+    (let [oid-v (second v)
+          crit-v (nth v 2)
+          val-v (nth v 3)]
+      (when-not (= :oid (first oid-v))
+        (throw (ex-info "Extension extnID must be an OID" {})))
+      (when-not (= mtc-ca-sha256-oid (second oid-v))
+        (throw (ex-info "not the Merkle Tree CA extension" {:oid (second oid-v)})))
+      (when-not (and (= :bool (first crit-v)) (true? (second crit-v)))
+        (throw (ex-info "Merkle Tree CA extension must be critical" {})))
+      (when-not (= :octets (first val-v))
+        (throw (ex-info "Extension extnValue must be an OCTET STRING" {})))
+      (decode-mtc-ca (second val-v)))))
+
 (defn decode-mtc-ca
   "Decode a DER MTCCertificationAuthority into the same keyed map."
   [bytes]
