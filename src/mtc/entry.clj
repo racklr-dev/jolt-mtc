@@ -41,6 +41,33 @@
     (dotimes [i len] (aset out i (aget bytes (+ off i))))
     out))
 
+;; --- MTCLogEntryExtension list -----------------------------------------------
+
+(defn encode-extensions
+  "Encode a list of [ext-type ext-data] extensions as the
+  extensions<0..2^16-1> field (2-byte total length + TLVs)."
+  [extensions]
+  (let [ext-body (reduce (fn [acc [et ed]]
+                           (bcat acc (u16 et) (u16 (alength ed)) ed))
+                         (byte-array 0)
+                         extensions)]
+    (bcat (u16 (alength ext-body)) ext-body)))
+
+(defn decode-extensions
+  "Decode an extensions<0..2^16-1> field starting at offset off of bytes.
+  Returns [extensions next-offset], extensions a vector of [ext-type ext-data]."
+  [bytes off]
+  (let [ext-len (+ (* 256 (u8 (aget bytes off))) (u8 (aget bytes (inc off))))
+        ext-end (+ off 2 ext-len)
+        extensions (loop [i (+ off 2) acc []]
+                     (if (>= i ext-end)
+                       acc
+                       (let [et (+ (* 256 (u8 (aget bytes i))) (u8 (aget bytes (inc i))))
+                             dl (+ (* 256 (u8 (aget bytes (+ i 2)))) (u8 (aget bytes (+ i 3))))
+                             data (slice bytes (+ i 4) dl)]
+                         (recur (+ i 4 dl) (conj acc [et data])))))]
+    [extensions ext-end]))
+
 ;; --- MTCLogEntry (TLS presentation) -----------------------------------------
 
 (defn encode-mtc-log-entry
@@ -48,28 +75,15 @@
   (ext-data a byte array); `type` is null-entry or tbs-cert-entry; `payload`
   is a byte array (nil -> empty)."
   [extensions type payload]
-  (let [ext-body (reduce (fn [acc [et ed]]
-                           (bcat acc (u16 et) (u16 (alength ed)) ed))
-                         (byte-array 0)
-                         extensions)
-        payload (or payload (byte-array 0))]
-    (bcat (u16 (alength ext-body)) ext-body
-         (byte-array [(unchecked-byte type)])
-         payload)))
+  (bcat (encode-extensions extensions)
+        (byte-array [(unchecked-byte type)])
+        (or payload (byte-array 0))))
 
 (defn decode-mtc-log-entry
   "Decode an MTCLogEntry. Returns {:extensions [[ext-type ext-data] ...]
   :type n :payload bytes}."
   [bytes]
-  (let [ext-len (+ (* 256 (u8 (aget bytes 0))) (u8 (aget bytes 1)))
-        ext-end (+ 2 ext-len)
-        extensions (loop [off 2 acc []]
-                     (if (>= off ext-end)
-                       acc
-                       (let [et (+ (* 256 (u8 (aget bytes off))) (u8 (aget bytes (inc off))))
-                             dl (+ (* 256 (u8 (aget bytes (+ off 2)))) (u8 (aget bytes (+ off 3))))
-                             data (slice bytes (+ off 4) dl)]
-                         (recur (+ off 4 dl) (conj acc [et data])))))
+  (let [[extensions ext-end] (decode-extensions bytes 0)
         type (u8 (aget bytes ext-end))
         payload (slice bytes (inc ext-end) (- (alength bytes) (inc ext-end)))]
     {:extensions extensions :type type :payload payload}))

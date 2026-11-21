@@ -43,7 +43,7 @@
   (loop [n n acc ()]
     (if (zero? n)
       (mapv unchecked-byte acc)
-      (recur (quot n 256) (cons (bit-and n 0xFF) acc)))))
+      (recur (quot n 256) (cons (mod n 256) acc)))))
 
 (defn- encode-length [n]
   (if (<= n 127)
@@ -90,7 +90,22 @@
         body (vec (cons first-byte (mapcat enc-oid-arc (nnext arcs))))]
     (tlv 0x06 (byte-array (mapv unchecked-byte body)))))
 
-(declare encode)
+(defn oid-content
+  "The DER OID content bytes (base-128, no tag/length) for arcs."
+  [arcs]
+  (let [a0 (first arcs)
+        a1 (second arcs)
+        first-byte (+ (* 40 a0) a1)]
+    (byte-array (mapv unchecked-byte (cons first-byte (mapcat enc-oid-arc (nnext arcs)))))))
+
+(declare parse-oid-content)
+
+(defn oid-arcs
+  "Parse DER OID content bytes (no tag/length) back into arcs."
+  [content-bytes]
+  (parse-oid-content content-bytes 0 (alength content-bytes)))
+
+(declare encode parse-oid-content)
 
 (defn encode-seq
   "DER SEQUENCE of DER values (already in tagged-list form)."
@@ -128,7 +143,9 @@
     (dotimes [i len] (aset out i (aget bytes (+ off i))))
     out))
 
-(defn- decode-int [body]
+(defn decode-int
+  "Decode a DER INTEGER body (tag/length already stripped) to an integer."
+  [body]
   (if (zero? (alength body))
     0
     (let [neg? (pos? (bit-and (aget body 0) 0x80))

@@ -17,20 +17,23 @@ mtc/
   test/mtc/                 test scripts run with `jolt run`
 ```
 
-Status: **§4 core implemented and verified against RFC Appendix C.**
+Status: **full RFC implementation (subtree core + log/certificate layer).**
 
-Done and passing (`jolt run test/mtc/<test>.clj`):
+Namespaces (all passing `jolt run test/mtc/<test>.clj`):
 
-- `mtc.bit` — bit/uint64 primitives
-- `mtc.sha256` — pure-Clojure SHA-256 (FIPS 180-4 KATs)
-- `mtc.merkle` — RFC9162 MTH + node-table + inclusion paths
-- `mtc.subtree` — RFC 4 validity, inclusion/consistency proofs (generate + verify)
-- `mtc.covering` — RFC 4.5 two-subtree covering
+- `mtc.bit`, `mtc.sha256`, `mtc.merkle`, `mtc.subtree`, `mtc.covering` —
+  RFC 4 + Appendix B/C, verified against the RFC's accumulated and
+  large-tree test vectors
+- `mtc.der` — minimal DER (INTEGER/OCTET STRING/OID/SEQUENCE/NULL/context)
+- `mtc.tls` — big-endian TLS presentation primitives
+- `mtc.entry` — MTCLogEntry + TBSCertificateLogEntry (RFC 5.2.1)
+- `mtc.log` — append-only issuance log with incremental Merkle tree head
+- `mtc.cosigner` — CosignedSubtree sign/verify (RFC 5.3)
+- `mtc.certificate` — MTCProof/Cosignature + serialNumber (RFC 6)
+- `mtc.ca` — MTCCertificationAuthority (RFC 5.5)
+- `mtc.landmarks` — landmark sequences + strict publish format (RFC 6.4)
+- `mtc.relying-party` — certificate verification (RFC 7.2)
 
-Validated: all four accumulated vectors (C.1.1–C.1.4), the C.2 large-tree
-validity + covering vectors (up to 2^64-1), and proof verify/negative
-cross-checks.
-
-Still stubbed: `mtc.entry`, `mtc.log`, `mtc.cosigner`, `mtc.ca`,
-`mtc.certificate`, `mtc.landmarks`, `mtc.relying-party`, `mtc.der`
-(the log/certificate layer, RFC 5–7).
+Out of scope (documented): full X.509 Certificate/Name/Validity codec,
+TLS/ACME wire integration, and concrete signature algorithms (the
+cosigner sign/verify seam is pluggable).
